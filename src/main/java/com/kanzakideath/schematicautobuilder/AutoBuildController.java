@@ -110,7 +110,7 @@ public final class AutoBuildController {
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = "Building from placed schematic";
         rememberNeededItems();
-        int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems);
+        int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems, BaritoneBridge.preferredScaffoldItems(lastNeededItems));
         if (supplied > 0) {
             message("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304b\u3089\u4e0d\u8db3\u5019\u88dc\u3092\u88dc\u5145\u3057\u307e\u3057\u305f: " + supplied, ChatFormatting.GREEN);
         }
@@ -438,7 +438,7 @@ public final class AutoBuildController {
 
     private static boolean supplyCreativeAndResume() {
         Set<Item> needed = rememberNeededItems();
-        int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), needed);
+        int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), needed, BaritoneBridge.preferredScaffoldItems(needed));
         if (supplied <= 0) {
             return false;
         }
@@ -453,7 +453,7 @@ public final class AutoBuildController {
         }
         creativeSupplyTicks = 20;
         Set<Item> needed = rememberNeededItems();
-        CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), needed);
+        CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), needed, BaritoneBridge.preferredScaffoldItems(needed));
     }
 
     private static boolean isCreativeMode() {

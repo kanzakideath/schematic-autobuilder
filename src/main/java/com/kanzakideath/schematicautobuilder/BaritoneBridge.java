@@ -11,6 +11,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.lang.reflect.Constructor;
@@ -71,6 +72,22 @@ public final class BaritoneBridge {
             "stripped_wood",
             "stripped_stem",
             "stripped_hyphae"
+    );
+    private static final List<Item> PREFERRED_SCAFFOLD_ITEMS = List.of(
+            Blocks.OAK_PLANKS.asItem(),
+            Blocks.BIRCH_PLANKS.asItem(),
+            Blocks.SPRUCE_PLANKS.asItem(),
+            Blocks.JUNGLE_PLANKS.asItem(),
+            Blocks.ACACIA_PLANKS.asItem(),
+            Blocks.DARK_OAK_PLANKS.asItem(),
+            Blocks.MANGROVE_PLANKS.asItem(),
+            Blocks.CHERRY_PLANKS.asItem(),
+            Blocks.BAMBOO_PLANKS.asItem(),
+            Blocks.COBBLESTONE.asItem(),
+            Blocks.DIRT.asItem(),
+            Blocks.STONE.asItem(),
+            Blocks.COBBLED_DEEPSLATE.asItem(),
+            Blocks.NETHERRACK.asItem()
     );
 
     public record BuildStats(
@@ -360,17 +377,36 @@ public final class BaritoneBridge {
             return;
         }
         Set<Item> needed = neededItems == null ? Set.of() : neededItems;
-        Set<Item> candidates = new HashSet<>();
+        List<Item> candidates = new ArrayList<>();
+        for (Item item : PREFERRED_SCAFFOLD_ITEMS) {
+            if (item != Items.AIR && !needed.contains(item) && !candidates.contains(item)) {
+                candidates.add(item);
+            }
+        }
         for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
             if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem) || needed.contains(stack.getItem())) {
                 continue;
             }
-            candidates.add(stack.getItem());
-            if (candidates.size() >= 16) {
+            if (!candidates.contains(stack.getItem())) {
+                candidates.add(stack.getItem());
+            }
+            if (candidates.size() >= 24) {
                 break;
             }
         }
+        clearCollectionSetting(settings, "acceptableThrowawayItems");
         addCollectionSettingValues(settings, "acceptableThrowawayItems", candidates);
+    }
+
+    public static List<Item> preferredScaffoldItems(Set<Item> neededItems) {
+        Set<Item> needed = neededItems == null ? Set.of() : neededItems;
+        List<Item> result = new ArrayList<>();
+        for (Item item : PREFERRED_SCAFFOLD_ITEMS) {
+            if (item != Items.AIR && !needed.contains(item) && !result.contains(item)) {
+                result.add(item);
+            }
+        }
+        return result;
     }
 
     public static Set<Item> currentNeededBuildItems() {
@@ -464,12 +500,13 @@ public final class BaritoneBridge {
         });
         Map<Block, Integer> inventoryCounts = inventoryBlockCounts();
         Map<String, Integer> woodFamilyCounts = inventoryWoodFamilyCounts();
+        boolean creative = isCreativePlayer();
         Map<Block, List<Block>> result = new HashMap<>();
         for (Map.Entry<String, List<Block>> entry : groups.entrySet()) {
             if (entry.getValue().size() < 2) {
                 continue;
             }
-            List<Block> ordered = orderedSubstitutes(entry.getKey(), entry.getValue(), inventoryCounts, woodFamilyCounts);
+            List<Block> ordered = orderedSubstitutes(entry.getKey(), entry.getValue(), inventoryCounts, woodFamilyCounts, creative);
             for (Block block : entry.getValue()) {
                 result.put(block, ordered);
             }
@@ -477,20 +514,23 @@ public final class BaritoneBridge {
         return result;
     }
 
-    private static List<Block> orderedSubstitutes(String group, List<Block> blocks, Map<Block, Integer> inventoryCounts, Map<String, Integer> woodFamilyCounts) {
+    private static List<Block> orderedSubstitutes(String group, List<Block> blocks, Map<Block, Integer> inventoryCounts, Map<String, Integer> woodFamilyCounts, boolean creative) {
         return blocks.stream()
                 .sorted(Comparator
-                        .comparingInt((Block block) -> substituteScore(group, block, inventoryCounts, woodFamilyCounts))
+                        .comparingInt((Block block) -> substituteScore(group, block, inventoryCounts, woodFamilyCounts, creative))
                         .reversed()
                         .thenComparing(BaritoneBridge::blockPath))
                 .toList();
     }
 
-    private static int substituteScore(String group, Block block, Map<Block, Integer> inventoryCounts, Map<String, Integer> woodFamilyCounts) {
+    private static int substituteScore(String group, Block block, Map<Block, Integer> inventoryCounts, Map<String, Integer> woodFamilyCounts, boolean creative) {
         String path = blockPath(block);
-        int score = inventoryCounts.getOrDefault(block, 0) * 100_000;
-        if (group.startsWith("wood:")) {
-            score += woodFamilyCounts.getOrDefault(woodFamily(path), 0) * 1_000;
+        int score = 0;
+        if (!creative) {
+            score += inventoryCounts.getOrDefault(block, 0) > 0 ? 10_000 : 0;
+            if (group.startsWith("wood:")) {
+                score += woodFamilyCounts.getOrDefault(woodFamily(path), 0) > 0 ? 1_000 : 0;
+            }
         }
         score += fallbackPriority(group, path);
         return score;
@@ -530,8 +570,8 @@ public final class BaritoneBridge {
         }
         return switch (family) {
             case "oak" -> 300;
-            case "spruce" -> 290;
-            case "birch" -> 280;
+            case "birch" -> 290;
+            case "spruce" -> 280;
             case "jungle" -> 270;
             case "acacia" -> 260;
             case "dark_oak" -> 250;
@@ -542,6 +582,11 @@ public final class BaritoneBridge {
             case "warped" -> 200;
             default -> 100;
         };
+    }
+
+    private static boolean isCreativePlayer() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.player != null && minecraft.player.isCreative();
     }
 
     private static Map<Block, Integer> inventoryBlockCounts() {
