@@ -81,6 +81,7 @@ public final class MaterialChestProcess {
     private static int totalTakenStacks;
     private static Set<Item> neededItems = Set.of();
     private static String status = "Idle";
+    private static boolean registeringChests;
 
     private MaterialChestProcess() {}
 
@@ -90,6 +91,54 @@ public final class MaterialChestProcess {
 
     public static String status() {
         return status;
+    }
+
+    public static boolean isRegisteringChests() {
+        return registeringChests;
+    }
+
+    public static void startChestRegistration(Minecraft minecraft) {
+        registeringChests = true;
+        status = "Material chest registration active";
+        AutoBuildController.message("素材チェスト登録: チェストを右クリックしてください。もう一度ボタンで終了します。", ChatFormatting.AQUA);
+        if (minecraft != null) {
+            minecraft.setScreenAndShow(null);
+        }
+    }
+
+    public static void stopChestRegistration() {
+        if (!registeringChests) {
+            return;
+        }
+        registeringChests = false;
+        status = "Material chest registration stopped";
+        AutoBuildController.message("素材チェスト登録を終了しました", ChatFormatting.YELLOW);
+    }
+
+    public static boolean handleChestRegistrationClick(Minecraft minecraft) {
+        if (!registeringChests) {
+            return false;
+        }
+        if (minecraft == null || minecraft.level == null || minecraft.hitResult == null || minecraft.hitResult.getType() != HitResult.Type.BLOCK) {
+            AutoBuildController.message("登録する素材チェストを見て右クリックしてください", ChatFormatting.YELLOW);
+            return true;
+        }
+        BlockPos pos = ((BlockHitResult) minecraft.hitResult).getBlockPos();
+        if (!isChest(minecraft, pos)) {
+            AutoBuildController.message("これはチェストではありません", ChatFormatting.YELLOW);
+            return true;
+        }
+        int before = AutoBuilderConfig.materialChestCount();
+        AutoBuilderConfig.addMaterialChest(pos);
+        int after = AutoBuilderConfig.materialChestCount();
+        if (after > before) {
+            status = "Registered material chest: " + shortPos(pos);
+            AutoBuildController.message("素材チェストを登録しました: " + shortPos(pos) + " / 合計 " + after, ChatFormatting.GREEN);
+        } else {
+            status = "Material chest already registered: " + shortPos(pos);
+            AutoBuildController.message("この素材チェストは登録済みです: " + shortPos(pos), ChatFormatting.YELLOW);
+        }
+        return true;
     }
 
     public static boolean start(FetchCallback fetchCallback) {

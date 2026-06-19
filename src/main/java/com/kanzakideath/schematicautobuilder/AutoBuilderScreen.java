@@ -51,8 +51,17 @@ public final class AutoBuilderScreen extends Screen {
         }));
         by += row + gap + 20;
 
-        addRenderableWidget(button(x + 24, by, half, "REGISTER MATERIAL CHEST", () -> {
-            MaterialChestProcess.registerLookedAtChest(Minecraft.getInstance());
+        addRenderableWidget(button(x + 24, by, half, materialChestRegisterLabel(), () -> {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (MaterialChestProcess.isRegisteringChests()) {
+                MaterialChestProcess.stopChestRegistration();
+                refresh();
+                return;
+            }
+            MaterialChestProcess.startChestRegistration(minecraft);
+            if (minecraft != null) {
+                minecraft.setScreenAndShow(null);
+            }
             refresh();
         }));
         addRenderableWidget(button(x + 32 + half, by, half, "FETCH MATERIALS NOW", () -> {
@@ -162,6 +171,12 @@ public final class AutoBuilderScreen extends Screen {
 
     private static String autoResumeLabel() {
         return "AUTO RESUME: " + (AutoBuilderConfig.startBuildAfterFetch() ? "ON" : "OFF");
+    }
+
+    private static String materialChestRegisterLabel() {
+        return MaterialChestProcess.isRegisteringChests()
+                ? "STOP MATERIAL CHEST REGISTRATION"
+                : "REGISTER MATERIAL CHESTS";
     }
 
     private int modeColor() {
