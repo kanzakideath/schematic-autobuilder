@@ -74,6 +74,11 @@ public final class BaritoneBridge {
             "stripped_hyphae"
     );
     private static final List<Item> PREFERRED_SCAFFOLD_ITEMS = List.of(
+            Blocks.DIRT.asItem(),
+            Blocks.COBBLESTONE.asItem(),
+            Blocks.NETHERRACK.asItem(),
+            Blocks.STONE.asItem(),
+            Blocks.COBBLED_DEEPSLATE.asItem(),
             Blocks.OAK_PLANKS.asItem(),
             Blocks.BIRCH_PLANKS.asItem(),
             Blocks.SPRUCE_PLANKS.asItem(),
@@ -82,12 +87,7 @@ public final class BaritoneBridge {
             Blocks.DARK_OAK_PLANKS.asItem(),
             Blocks.MANGROVE_PLANKS.asItem(),
             Blocks.CHERRY_PLANKS.asItem(),
-            Blocks.BAMBOO_PLANKS.asItem(),
-            Blocks.COBBLESTONE.asItem(),
-            Blocks.DIRT.asItem(),
-            Blocks.STONE.asItem(),
-            Blocks.COBBLED_DEEPSLATE.asItem(),
-            Blocks.NETHERRACK.asItem()
+            Blocks.BAMBOO_PLANKS.asItem()
     );
 
     public record BuildStats(

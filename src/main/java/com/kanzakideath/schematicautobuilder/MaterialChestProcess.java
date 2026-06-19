@@ -25,6 +25,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -90,6 +91,7 @@ public final class MaterialChestProcess {
     private static int currentChestTaken;
     private static int totalTakenStacks;
     private static Set<Item> neededItems = Set.of();
+    private static Set<Item> scaffoldItems = Set.of();
     private static final Map<Item, Integer> takenItemStacks = new HashMap<>();
     private static String status = "Idle";
     private static boolean registeringChests;
@@ -188,7 +190,11 @@ public final class MaterialChestProcess {
         }
         targets = chests;
         callback = fetchCallback;
-        neededItems = BaritoneBridge.currentNeededBuildItems();
+        Set<Item> buildItems = BaritoneBridge.currentNeededBuildItems();
+        scaffoldItems = Set.copyOf(BaritoneBridge.preferredScaffoldItems(buildItems));
+        Set<Item> fetchItems = new LinkedHashSet<>(buildItems);
+        fetchItems.addAll(scaffoldItems);
+        neededItems = Set.copyOf(fetchItems);
         takenItemStacks.clear();
         targetIndex = 0;
         totalTakenStacks = 0;
@@ -214,6 +220,7 @@ public final class MaterialChestProcess {
         currentChestTaken = 0;
         totalTakenStacks = 0;
         neededItems = Set.of();
+        scaffoldItems = Set.of();
         takenItemStacks.clear();
         status = reason == null ? "Idle" : reason;
         if (previousCallback != null && "Paused".equals(reason)) {
@@ -443,6 +450,7 @@ public final class MaterialChestProcess {
         currentChestTaken = 0;
         totalTakenStacks = 0;
         neededItems = Set.of();
+        scaffoldItems = Set.of();
         takenItemStacks.clear();
         status = reason;
         AutoBuildController.message(reason, color);
@@ -492,6 +500,9 @@ public final class MaterialChestProcess {
     private static int stackLimit(ItemStack stack) {
         if (neededItems.isEmpty()) {
             return INGREDIENT_STACK_LIMIT;
+        }
+        if (scaffoldItems.contains(stack.getItem())) {
+            return 1;
         }
         if (neededItems.contains(stack.getItem())) {
             return EXACT_ITEM_STACK_LIMIT;
