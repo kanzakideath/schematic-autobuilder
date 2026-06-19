@@ -433,7 +433,9 @@ public final class MaterialChestProcess {
 
     private static boolean isBuildMaterial(ItemStack stack) {
         if (!neededItems.isEmpty()) {
-            return neededItems.contains(stack.getItem()) || MaterialRecipeHelper.isUsefulForNeeded(stack, neededItems);
+            return neededItems.contains(stack.getItem())
+                    || BaritoneBridge.isAutoSubstituteMaterial(stack.getItem(), neededItems)
+                    || MaterialRecipeHelper.isUsefulForNeeded(stack, neededItems);
         }
         if (stack.getItem() instanceof BlockItem) {
             return true;

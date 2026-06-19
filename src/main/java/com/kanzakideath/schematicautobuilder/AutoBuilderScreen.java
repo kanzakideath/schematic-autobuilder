@@ -86,8 +86,12 @@ public final class AutoBuilderScreen extends Screen {
         }));
         by += row + gap;
 
-        addRenderableWidget(button(x + 24, by, full, topDownLabel(), () -> {
+        addRenderableWidget(button(x + 24, by, half, topDownLabel(), () -> {
             AutoBuilderConfig.toggleTopDownBuild();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + half, by, half, substituteLabel(), () -> {
+            AutoBuilderConfig.toggleAutoSubstituteMaterials();
             refresh();
         }));
         by += row + gap + 20;
@@ -131,15 +135,16 @@ public final class AutoBuilderScreen extends Screen {
         drawChip(graphics, x + 24, y + 72, "\u81ea\u52d5\u88dc\u5145", AutoBuilderConfig.autoFetchMaterials());
         drawChip(graphics, x + 182, y + 72, "\u88dc\u5145\u5f8c\u518d\u958b", AutoBuilderConfig.startBuildAfterFetch());
         drawChip(graphics, x + 340, y + 72, "\u81ea\u52d5\u4f5c\u6210", AutoBuilderConfig.autoCraftMaterials());
-        drawOrderChip(graphics, x + 498, y + 72);
+        drawSubstituteChip(graphics, x + 498, y + 72);
         graphics.text(this.font, "\u30e2\u30fc\u30c9: " + modeNameJa() + " / \u7d20\u6750\u7bb1: " + AutoBuilderConfig.materialChestCount(), x + 24, y + 94, modeColor());
-        graphics.text(this.font, "Baritone: " + statusJa(BaritoneBridge.status()), x + 182, y + 94, BaritoneBridge.isAvailable() ? GREEN : RED);
+        graphics.text(this.font, "\u5efa\u7bc9\u9806\u5e8f: " + buildOrderText(), x + 182, y + 94, AutoBuilderConfig.topDownBuild() ? CYAN : ORANGE);
+        graphics.text(this.font, "Baritone: " + statusJa(BaritoneBridge.status()), x + 360, y + 94, BaritoneBridge.isAvailable() ? GREEN : RED);
 
         int sx = x + 24;
         int sy = y + 108;
         section(graphics, sx, sy, panelWidth - 48, 84, "01  \u30e2\u30fc\u30c9", "\u914d\u7f6e\u6e08\u307f\u8a2d\u8a08\u56f3\u306e\u81ea\u52d5\u5efa\u7bc9\u3001\u307e\u305f\u306fBaritone\u6574\u5730\u30e2\u30fc\u30c9\u3092\u958b\u59cb\u3057\u307e\u3059");
         section(graphics, sx, sy + 96, panelWidth - 48, 134, "02  \u7d20\u6750\u88dc\u5145", "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3068\u6574\u5730\u4fdd\u7ba1\u30c1\u30a7\u30b9\u30c8\u304b\u3089\u5c11\u91cf\u305a\u3064\u88dc\u5145\u3057\u3001\u4e0d\u8db3\u5206\u306f\u4f5c\u6210/\u7cbe\u932c\u3057\u307e\u3059");
-        section(graphics, sx, sy + 242, panelWidth - 48, 74, "03  \u7ba1\u7406", "\u5efa\u7bc9\u9806\u5e8f\u306e\u4e0a\u304b\u3089/\u4e0b\u304b\u3089\u5207\u308a\u66ff\u3048\u3001\u7d20\u6750\u767b\u9332\u306e\u524a\u9664\u3001\u66f4\u65b0\u78ba\u8a8d\u3067\u3059");
+        section(graphics, sx, sy + 242, panelWidth - 48, 74, "03  \u7ba1\u7406", "\u5efa\u7bc9\u9806\u5e8f\u3001\u6728\u6750/\u8272\u7d20\u6750\u306e\u4ee3\u7528\u3001\u7d20\u6750\u767b\u9332\u3001\u66f4\u65b0\u78ba\u8a8d\u3067\u3059");
 
         graphics.text(this.font, "\u8a2d\u8a08\u56f3: " + statusJa(BaritoneBridge.openSchematicStatus()), x + 24, y + panelHeight - 58, DIM);
         graphics.text(this.font, "\u81ea\u52d5\u5efa\u7bc9: " + statusJa(AutoBuildController.status()), x + 24, y + panelHeight - 42, statusColor(AutoBuildController.status()));
@@ -192,6 +197,10 @@ public final class AutoBuilderScreen extends Screen {
 
     private static String topDownLabel() {
         return "\u5efa\u7bc9\u9806\u5e8f: " + buildOrderText();
+    }
+
+    private static String substituteLabel() {
+        return "\u7d20\u6750\u4ee3\u7528: " + onOff(AutoBuilderConfig.autoSubstituteMaterials());
     }
 
     private static String buildOrderText() {
@@ -304,12 +313,12 @@ public final class AutoBuilderScreen extends Screen {
         graphics.text(this.font, label + ": " + onOff(on), x + 6, y + 4, color);
     }
 
-    private void drawOrderChip(GuiGraphicsExtractor graphics, int x, int y) {
-        boolean topDown = AutoBuilderConfig.topDownBuild();
-        int color = topDown ? CYAN : ORANGE;
-        graphics.fill(x, y, x + 146, y + 16, topDown ? 0x3319EAF2 : 0x33FFB545);
+    private void drawSubstituteChip(GuiGraphicsExtractor graphics, int x, int y) {
+        boolean on = AutoBuilderConfig.autoSubstituteMaterials();
+        int color = on ? GREEN : RED;
+        graphics.fill(x, y, x + 146, y + 16, on ? 0x3332FF88 : 0x33FF5548);
         border(graphics, x, y, 146, 16, color);
-        graphics.text(this.font, "\u5efa\u7bc9\u9806\u5e8f: " + buildOrderText(), x + 6, y + 4, color);
+        graphics.text(this.font, "\u7d20\u6750\u4ee3\u7528: " + onOff(on), x + 6, y + 4, color);
     }
 
     private void drawGrid(GuiGraphicsExtractor graphics, int step, int color) {

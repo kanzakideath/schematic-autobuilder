@@ -2,12 +2,15 @@ package com.kanzakideath.schematicautobuilder;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.lang.reflect.Constructor;
@@ -16,12 +19,59 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 public final class BaritoneBridge {
+    private static final List<String> WOOD_SUFFIXES = List.of(
+            "planks",
+            "stairs",
+            "slab",
+            "fence",
+            "fence_gate",
+            "door",
+            "trapdoor",
+            "button",
+            "pressure_plate",
+            "sign",
+            "wall_sign",
+            "hanging_sign",
+            "wall_hanging_sign",
+            "log",
+            "wood",
+            "stem",
+            "hyphae"
+    );
+    private static final List<String> COLOR_PREFIXES = List.of(
+            "white", "orange", "magenta", "light_blue", "yellow", "lime", "pink", "gray",
+            "light_gray", "cyan", "purple", "blue", "brown", "green", "red", "black"
+    );
+    private static final List<String> COLOR_SUFFIXES = List.of(
+            "stained_glass",
+            "stained_glass_pane",
+            "wool",
+            "carpet",
+            "concrete",
+            "concrete_powder",
+            "terracotta",
+            "glazed_terracotta"
+    );
+    private static final Set<String> WOOD_INGREDIENT_SUFFIXES = Set.of(
+            "planks",
+            "log",
+            "wood",
+            "stem",
+            "hyphae",
+            "stripped_log",
+            "stripped_wood",
+            "stripped_stem",
+            "stripped_hyphae"
+    );
 
     private BaritoneBridge() {}
 
@@ -218,6 +268,11 @@ public final class BaritoneBridge {
         clearCollectionSetting(settings, "okIfAir");
         clearMapSetting(settings, "buildValidSubstitutes");
         clearMapSetting(settings, "buildSubstitutes");
+        if (AutoBuilderConfig.autoSubstituteMaterials()) {
+            Map<Block, List<Block>> substitutes = automaticMaterialSubstitutes();
+            putMapSettingValues(settings, "buildSubstitutes", substitutes);
+            putMapSettingValues(settings, "buildValidSubstitutes", substitutes);
+        }
     }
 
     public static void configureTemporaryScaffoldItems(Set<Item> neededItems) {
@@ -295,6 +350,231 @@ public final class BaritoneBridge {
         }
     }
 
+    public static boolean isAutoSubstituteMaterial(Item item, Set<Item> neededItems) {
+        if (!AutoBuilderConfig.autoSubstituteMaterials() || item == null || neededItems == null || neededItems.isEmpty() || !(item instanceof BlockItem blockItem)) {
+            return false;
+        }
+        Block candidate = blockItem.getBlock();
+        String candidateGroup = substituteGroupKey(candidate);
+        String candidateWoodSuffix = woodSuffix(blockPath(candidate));
+        for (Item neededItem : neededItems) {
+            if (item == neededItem) {
+                return true;
+            }
+            if (!(neededItem instanceof BlockItem neededBlockItem)) {
+                continue;
+            }
+            Block needed = neededBlockItem.getBlock();
+            String neededGroup = substituteGroupKey(needed);
+            if (candidateGroup != null && candidateGroup.equals(neededGroup)) {
+                return true;
+            }
+            if (neededGroup != null && neededGroup.startsWith("wood:") && WOOD_INGREDIENT_SUFFIXES.contains(candidateWoodSuffix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static Map<Block, List<Block>> automaticMaterialSubstitutes() {
+        Map<String, List<Block>> groups = new LinkedHashMap<>();
+        BuiltInRegistries.BLOCK.stream().forEach(block -> {
+            String group = substituteGroupKey(block);
+            if (group != null) {
+                groups.computeIfAbsent(group, ignored -> new ArrayList<>()).add(block);
+            }
+        });
+        Map<Block, Integer> inventoryCounts = inventoryBlockCounts();
+        Map<String, Integer> woodFamilyCounts = inventoryWoodFamilyCounts();
+        Map<Block, List<Block>> result = new HashMap<>();
+        for (Map.Entry<String, List<Block>> entry : groups.entrySet()) {
+            if (entry.getValue().size() < 2) {
+                continue;
+            }
+            List<Block> ordered = orderedSubstitutes(entry.getKey(), entry.getValue(), inventoryCounts, woodFamilyCounts);
+            for (Block block : entry.getValue()) {
+                result.put(block, ordered);
+            }
+        }
+        return result;
+    }
+
+    private static List<Block> orderedSubstitutes(String group, List<Block> blocks, Map<Block, Integer> inventoryCounts, Map<String, Integer> woodFamilyCounts) {
+        return blocks.stream()
+                .sorted(Comparator
+                        .comparingInt((Block block) -> substituteScore(group, block, inventoryCounts, woodFamilyCounts))
+                        .reversed()
+                        .thenComparing(BaritoneBridge::blockPath))
+                .toList();
+    }
+
+    private static int substituteScore(String group, Block block, Map<Block, Integer> inventoryCounts, Map<String, Integer> woodFamilyCounts) {
+        String path = blockPath(block);
+        int score = inventoryCounts.getOrDefault(block, 0) * 100_000;
+        if (group.startsWith("wood:")) {
+            score += woodFamilyCounts.getOrDefault(woodFamily(path), 0) * 1_000;
+        }
+        score += fallbackPriority(group, path);
+        return score;
+    }
+
+    private static int fallbackPriority(String group, String path) {
+        if ("color:stained_glass".equals(group)) {
+            return "glass".equals(path) ? 500 : colorFallbackPriority(path, "stained_glass");
+        }
+        if ("color:stained_glass_pane".equals(group)) {
+            return "glass_pane".equals(path) ? 500 : colorFallbackPriority(path, "stained_glass_pane");
+        }
+        if ("color:terracotta".equals(group)) {
+            return "terracotta".equals(path) ? 500 : colorFallbackPriority(path, "terracotta");
+        }
+        if (group.startsWith("color:")) {
+            return colorFallbackPriority(path, group.substring("color:".length()));
+        }
+        if (group.startsWith("wood:")) {
+            return woodFallbackPriority(woodFamily(path));
+        }
+        return 0;
+    }
+
+    private static int colorFallbackPriority(String path, String suffix) {
+        for (int i = 0; i < COLOR_PREFIXES.size(); i++) {
+            if (path.equals(COLOR_PREFIXES.get(i) + "_" + suffix)) {
+                return 200 - i;
+            }
+        }
+        return 0;
+    }
+
+    private static int woodFallbackPriority(String family) {
+        if (family == null) {
+            return 0;
+        }
+        return switch (family) {
+            case "oak" -> 300;
+            case "spruce" -> 290;
+            case "birch" -> 280;
+            case "jungle" -> 270;
+            case "acacia" -> 260;
+            case "dark_oak" -> 250;
+            case "mangrove" -> 240;
+            case "cherry" -> 230;
+            case "bamboo" -> 220;
+            case "crimson" -> 210;
+            case "warped" -> 200;
+            default -> 100;
+        };
+    }
+
+    private static Map<Block, Integer> inventoryBlockCounts() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return Map.of();
+        }
+        Map<Block, Integer> result = new HashMap<>();
+        for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+            if (!stack.isEmpty() && stack.getItem() instanceof BlockItem blockItem) {
+                result.merge(blockItem.getBlock(), stack.getCount(), Integer::sum);
+            }
+        }
+        return result;
+    }
+
+    private static Map<String, Integer> inventoryWoodFamilyCounts() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return Map.of();
+        }
+        Map<String, Integer> result = new HashMap<>();
+        for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+            if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) {
+                continue;
+            }
+            String family = woodFamily(blockPath(blockItem.getBlock()));
+            if (family != null) {
+                result.merge(family, stack.getCount(), Integer::sum);
+            }
+        }
+        return result;
+    }
+
+    private static String substituteGroupKey(Block block) {
+        return substituteGroupKey(blockPath(block));
+    }
+
+    private static String substituteGroupKey(String path) {
+        String woodSuffix = woodSuffix(path);
+        if (woodSuffix != null) {
+            return "wood:" + woodSuffix;
+        }
+        String colorGroup = colorGroupKey(path);
+        if (colorGroup != null) {
+            return colorGroup;
+        }
+        return null;
+    }
+
+    private static String woodSuffix(String path) {
+        if (path == null || path.isBlank()) {
+            return null;
+        }
+        List<String> suffixes = WOOD_SUFFIXES.stream()
+                .sorted(Comparator.comparingInt(String::length).reversed())
+                .toList();
+        for (String suffix : suffixes) {
+            if (path.startsWith("stripped_") && isStrippableSuffix(suffix) && path.endsWith("_" + suffix)) {
+                return "stripped_" + suffix;
+            }
+            if (path.endsWith("_" + suffix)) {
+                return suffix;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isStrippableSuffix(String suffix) {
+        return "log".equals(suffix) || "wood".equals(suffix) || "stem".equals(suffix) || "hyphae".equals(suffix);
+    }
+
+    private static String woodFamily(String path) {
+        String suffix = woodSuffix(path);
+        if (suffix == null) {
+            return null;
+        }
+        String basePath = path.startsWith("stripped_") ? path.substring("stripped_".length()) : path;
+        String baseSuffix = suffix.startsWith("stripped_") ? suffix.substring("stripped_".length()) : suffix;
+        String end = "_" + baseSuffix;
+        if (!basePath.endsWith(end)) {
+            return null;
+        }
+        return basePath.substring(0, basePath.length() - end.length());
+    }
+
+    private static String colorGroupKey(String path) {
+        if ("glass".equals(path)) {
+            return "color:stained_glass";
+        }
+        if ("glass_pane".equals(path)) {
+            return "color:stained_glass_pane";
+        }
+        if ("terracotta".equals(path)) {
+            return "color:terracotta";
+        }
+        for (String color : COLOR_PREFIXES) {
+            for (String suffix : COLOR_SUFFIXES) {
+                if (path.equals(color + "_" + suffix)) {
+                    return "color:" + suffix;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String blockPath(Block block) {
+        Identifier key = BuiltInRegistries.BLOCK.getKey(block);
+        return key == null ? "" : key.getPath();
+    }
+
     private static void invokeBuilderNoArgs(String methodName) {
         Object builder = builderProcess();
         if (builder == null) {
@@ -362,6 +642,23 @@ public final class BaritoneBridge {
             Object value = valueField.get(setting);
             if (value instanceof Map<?, ?> map) {
                 map.clear();
+            }
+        } catch (ReflectiveOperationException | LinkageError | UnsupportedOperationException ignored) {
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void putMapSettingValues(Object settings, String fieldName, Map<?, ?> additions) {
+        if (additions == null || additions.isEmpty()) {
+            return;
+        }
+        try {
+            Field settingField = settings.getClass().getField(fieldName);
+            Object setting = settingField.get(settings);
+            Field valueField = setting.getClass().getField("value");
+            Object value = valueField.get(setting);
+            if (value instanceof Map map) {
+                map.putAll(additions);
             }
         } catch (ReflectiveOperationException | LinkageError | UnsupportedOperationException ignored) {
         }
