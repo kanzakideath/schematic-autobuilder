@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "package": "com.kanzakideath.schematicautobuilder.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "verbose": false,
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "MixinMinecraft",
+    "MixinOptions"
+  ],
+  "mixins": []
+}
+

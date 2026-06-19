@@ -1,0 +1,2 @@
+https://api.github.com/repos/kanzakideath/schematic-autobuilder/contents/updates/schematic-autobuilder-update.json?ref=main
+

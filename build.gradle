@@ -1,0 +1,78 @@
+plugins {
+    id 'java'
+    id 'maven-publish'
+    id 'xyz.wagyourtail.unimined' version '1.4.2-SNAPSHOT'
+}
+
+group = project.maven_group
+version = project.mod_version
+archivesBaseName = project.archives_base_name
+
+sourceCompatibility = targetCompatibility = JavaVersion.toVersion(project.java_version)
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(project.java_version.toInteger()))
+    }
+}
+
+repositories {
+    maven {
+        name = 'local-compat-maven'
+        url = uri("${rootProject.projectDir}/local-maven")
+    }
+    maven {
+        name = 'fabric-maven'
+        url = 'https://maven.fabricmc.net/'
+    }
+    maven {
+        name = 'spongepowered-repo'
+        url = 'https://repo.spongepowered.org/repository/maven-public/'
+    }
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly "org.spongepowered:mixin:${project.mixin_version}"
+    compileOnly "org.ow2.asm:asm:${project.asm_version}"
+}
+
+unimined.minecraft {
+    version project.minecraft_version
+
+    mappings {
+        intermediary()
+        mojmap()
+    }
+
+    fabric {
+        loader project.fabric_version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    if (JavaVersion.current().isJava9Compatible()) {
+        options.release = project.java_version.toInteger()
+    }
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand 'version': project.version
+    }
+}
+
+jar {
+    archiveBaseName.set(project.archives_base_name)
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+        }
+    }
+}
+
