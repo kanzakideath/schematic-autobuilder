@@ -44,7 +44,7 @@ public final class AutoBuilderKeys {
             return;
         }
         while (PAUSE_AUTOMATION.consumeClick()) {
-            AutoBuildController.togglePause();
+            AutoBuildController.toggleSharedPauseKey();
         }
         AutoBuildController.tick(minecraft);
     }
@@ -57,9 +57,13 @@ public final class AutoBuilderKeys {
             openMenu(minecraft);
             return true;
         }
-        if (minecraft.player != null && minecraft.level != null && PAUSE_AUTOMATION.matches(event)) {
-            AutoBuildController.togglePause();
-            return true;
+        if (minecraft.player != null && minecraft.level != null) {
+            if (BaritoneBridge.matchesClearAreaPauseKey(event)) {
+                return AutoBuildController.toggleSharedPauseKey();
+            }
+            if (PAUSE_AUTOMATION.matches(event)) {
+                return AutoBuildController.toggleSharedPauseKey();
+            }
         }
         return false;
     }

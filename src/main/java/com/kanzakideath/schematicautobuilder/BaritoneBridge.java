@@ -2,6 +2,7 @@ package com.kanzakideath.schematicautobuilder;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
@@ -108,6 +109,42 @@ public final class BaritoneBridge {
 
     public static void resumeBuilder() {
         invokeBuilderNoArgs("resume");
+    }
+
+    public static boolean isClearingAreaActive() {
+        Object builder = builderProcess();
+        if (builder == null) {
+            return false;
+        }
+        try {
+            Method method = builder.getClass().getMethod("isClearingArea");
+            return Boolean.TRUE.equals(method.invoke(builder));
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
+    }
+
+    public static boolean toggleClearAreaPause() {
+        try {
+            Class<?> control = Class.forName("baritone.utils.ClearAreaPauseControl");
+            Object result = control.getMethod("togglePrimary").invoke(null);
+            return Boolean.TRUE.equals(result);
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            return false;
+        }
+    }
+
+    public static boolean matchesClearAreaPauseKey(KeyEvent event) {
+        if (event == null) {
+            return false;
+        }
+        try {
+            Class<?> bindings = Class.forName("baritone.utils.BaritoneKeyBindings");
+            Object result = bindings.getMethod("matchesClearAreaPause", KeyEvent.class).invoke(null, event);
+            return Boolean.TRUE.equals(result);
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            return false;
+        }
     }
 
     public static boolean cancelPathing() {

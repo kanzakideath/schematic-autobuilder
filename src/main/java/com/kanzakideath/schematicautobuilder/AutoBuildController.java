@@ -28,8 +28,15 @@ public final class AutoBuildController {
         COMPLETE
     }
 
+    private enum WorkMode {
+        NONE,
+        AUTO_BUILD,
+        CLEAR_AREA
+    }
+
     private static Mode mode = Mode.IDLE;
     private static Mode pausedFrom = Mode.IDLE;
+    private static WorkMode lastWorkMode = WorkMode.NONE;
     private static int builderPausedTicks;
     private static int inactiveTicks;
     private static int refetchGuardTicks;
@@ -48,6 +55,7 @@ public final class AutoBuildController {
         MaterialChestProcess.tick(minecraft);
         MaterialCraftProcess.tick(minecraft);
         MaterialSmeltProcess.tick(minecraft);
+        noteExternalWorkMode();
 
         if (refetchGuardTicks > 0) {
             refetchGuardTicks--;
@@ -89,6 +97,7 @@ public final class AutoBuildController {
         creativeSupplyTicks = 0;
         materialShortageNotified = false;
         mode = Mode.BUILDING;
+        lastWorkMode = WorkMode.AUTO_BUILD;
         status = "Building from placed schematic";
         rememberNeededItems();
         int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems);
@@ -108,15 +117,57 @@ public final class AutoBuildController {
             status = MaterialChestProcess.status();
         } else {
             mode = Mode.FETCHING;
+            lastWorkMode = WorkMode.AUTO_BUILD;
             status = "Fetching materials";
         }
     }
 
     public static void togglePause() {
+        toggleAutoBuildPause();
+    }
+
+    public static boolean toggleSharedPauseKey() {
+        noteExternalWorkMode();
+        if (mode == Mode.PAUSED || isAutoBuildAutomationMode()) {
+            lastWorkMode = WorkMode.AUTO_BUILD;
+            return toggleAutoBuildPause();
+        }
+        if (BaritoneBridge.isClearingAreaActive() || lastWorkMode == WorkMode.CLEAR_AREA) {
+            boolean toggled = BaritoneBridge.toggleClearAreaPause();
+            if (toggled) {
+                lastWorkMode = WorkMode.CLEAR_AREA;
+            }
+            return toggled;
+        }
+        return false;
+    }
+
+    private static boolean toggleAutoBuildPause() {
         if (mode == Mode.PAUSED) {
             resume();
-        } else {
+            return true;
+        }
+        if (isAutoBuildAutomationMode()) {
             pause();
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean isAutoBuildAutomationMode() {
+        return switch (mode) {
+            case BUILDING, FETCHING, CRAFTING, SMELTING, WAITING_FOR_MATERIALS -> true;
+            default -> false;
+        };
+    }
+
+    public static void noteExternalWorkMode() {
+        if (isAutoBuildAutomationMode() || mode == Mode.PAUSED) {
+            lastWorkMode = WorkMode.AUTO_BUILD;
+            return;
+        }
+        if (BaritoneBridge.isClearingAreaActive()) {
+            lastWorkMode = WorkMode.CLEAR_AREA;
         }
     }
 
@@ -280,6 +331,7 @@ public final class AutoBuildController {
         builderPausedTicks = 0;
         inactiveTicks = 0;
         mode = Mode.BUILDING;
+        lastWorkMode = WorkMode.AUTO_BUILD;
         status = resumeStatus;
         message(status, ChatFormatting.GREEN);
     }
@@ -372,6 +424,7 @@ public final class AutoBuildController {
             return;
         }
         pausedFrom = mode;
+        lastWorkMode = WorkMode.AUTO_BUILD;
         mode = Mode.PAUSED;
         status = "Paused";
         MaterialChestProcess.stop("Paused");
@@ -406,6 +459,7 @@ public final class AutoBuildController {
             }
             materialShortageNotified = false;
             mode = Mode.BUILDING;
+            lastWorkMode = WorkMode.AUTO_BUILD;
             status = "Resumed build";
             message(status, ChatFormatting.GREEN);
             return;
