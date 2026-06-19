@@ -165,6 +165,14 @@ public final class MaterialRecipeHelper {
     }
 
     private static void addCommonFallbackIngredients(Set<Item> neededItems, Set<Item> result) {
+        if (neededItems.contains(Items.HOPPER)) {
+            result.add(Items.IRON_INGOT);
+            result.add(Items.CHEST);
+            addCommonPlanks(result);
+        }
+        if (neededItems.contains(Items.CHEST) || neededItems.contains(Items.TRAPPED_CHEST)) {
+            addCommonPlanks(result);
+        }
         if (neededItems.contains(Items.STONE_BRICK_SLAB)) {
             result.add(Items.STONE_BRICKS);
             result.add(Items.STONE);
@@ -194,5 +202,20 @@ public final class MaterialRecipeHelper {
         if (neededItems.contains(Items.GLASS)) {
             result.add(Items.SAND);
         }
+    }
+
+    private static void addCommonPlanks(Set<Item> result) {
+        result.add(Items.OAK_PLANKS);
+        result.add(Items.BIRCH_PLANKS);
+        result.add(Items.SPRUCE_PLANKS);
+        result.add(Items.JUNGLE_PLANKS);
+        result.add(Items.ACACIA_PLANKS);
+        result.add(Items.DARK_OAK_PLANKS);
+        result.add(Items.MANGROVE_PLANKS);
+        result.add(Items.CHERRY_PLANKS);
+        result.add(Items.PALE_OAK_PLANKS);
+        result.add(Items.BAMBOO_PLANKS);
+        result.add(Items.CRIMSON_PLANKS);
+        result.add(Items.WARPED_PLANKS);
     }
 }
