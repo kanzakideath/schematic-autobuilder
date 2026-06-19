@@ -1,4 +1,8 @@
 {
   "key.schematicautobuilder.open_menu": "Open Auto Builder Menu",
-  "key.schematicautobuilder.pause_automation": "Pause/Resume Auto Builder"
+  "key.schematicautobuilder.pause_automation": "Pause/Resume Auto Builder",
+  "key.schematicautobuilder.start_or_resume": "Start/Resume Auto Build",
+  "key.schematicautobuilder.stop_automation": "Stop Auto Build",
+  "key.schematicautobuilder.toggle_hud_detail": "Toggle Auto Builder HUD Detail",
+  "key.schematicautobuilder.toggle_material_chest_registration": "Toggle Material Chest Registration"
 }

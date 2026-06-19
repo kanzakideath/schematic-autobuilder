@@ -3,7 +3,7 @@
   "id": "schematicautobuilder",
   "version": "${version}",
   "name": "Schematic Auto Builder",
-  "description": "One-button Litematica/Schematica building helper using Baritone, registered material chests, and a GitHub update manifest.",
+  "description": "One-button Litematica/Schematica building helper using Baritone, registered material chests, status HUD, and a GitHub update manifest.",
   "authors": [
     "kanzakideath",
     "Codex"
@@ -30,4 +30,3 @@
     "litematica": "*"
   }
 }
-

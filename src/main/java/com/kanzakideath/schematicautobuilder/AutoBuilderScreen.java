@@ -5,7 +5,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+
+import java.util.List;
 
 public final class AutoBuilderScreen extends Screen {
 
@@ -18,6 +21,8 @@ public final class AutoBuilderScreen extends Screen {
     private static final int DIM = 0xFF8DB9C1;
     private static final int BLOCK = 0x66000000;
 
+    private Page page = Page.MAIN;
+
     public AutoBuilderScreen() {
         super(Component.literal("\u8a2d\u8a08\u56f3 \u81ea\u52d5\u5efa\u7bc9"));
     }
@@ -29,11 +34,21 @@ public final class AutoBuilderScreen extends Screen {
 
     @Override
     protected void init() {
+        switch (page) {
+            case SETTINGS -> initSettings();
+            case CHESTS -> initChests();
+            case MATERIALS -> initMaterials();
+            default -> initMain();
+        }
+    }
+
+    private void initMain() {
         int panelWidth = Math.min(680, this.width - 36);
         int x = (this.width - panelWidth) / 2;
         int y = panelY();
         int full = panelWidth - 48;
         int half = (full - 8) / 2;
+        int third = (full - 16) / 3;
         int row = 24;
         int gap = 6;
         int by = y + 134;
@@ -94,6 +109,20 @@ public final class AutoBuilderScreen extends Screen {
             AutoBuilderConfig.toggleAutoSubstituteMaterials();
             refresh();
         }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, third, "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u4e00\u89a7", () -> {
+            page = Page.CHESTS;
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + third, by, third, "\u5fc5\u8981/\u4e0d\u8db3\u7d20\u6750", () -> {
+            page = Page.MATERIALS;
+            refresh();
+        }));
+        addRenderableWidget(button(x + 40 + third * 2, by, third, "HUD\u8a2d\u5b9a", () -> {
+            page = Page.SETTINGS;
+            refresh();
+        }));
         by += row + gap + 20;
 
         addRenderableWidget(button(x + 24, by, half, "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u767b\u9332\u3092\u5168\u524a\u9664", () -> {
@@ -111,6 +140,143 @@ public final class AutoBuilderScreen extends Screen {
                 this.minecraft.setScreenAndShow(null);
             }
         }));
+    }
+
+    private void initSettings() {
+        int panelWidth = Math.min(680, this.width - 36);
+        int x = (this.width - panelWidth) / 2;
+        int y = panelY();
+        int full = panelWidth - 48;
+        int half = (full - 8) / 2;
+        int third = (full - 16) / 3;
+        int quarter = (full - 24) / 4;
+        int row = 24;
+        int gap = 6;
+        int by = y + 134;
+
+        addRenderableWidget(button(x + 24, by, half, hudEnabledLabel(), () -> {
+            AutoBuilderConfig.toggleHudEnabled();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + half, by, half, hudModeLabel(), () -> {
+            AutoBuilderConfig.toggleHudDetailed();
+            refresh();
+        }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, third, hudPositionLabel(), () -> {
+            AutoBuilderConfig.cycleHudPosition();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + third, by, third, "HUD X -4: " + AutoBuilderConfig.hudXOffset(), () -> {
+            AutoBuilderConfig.adjustHudXOffset(-4);
+            refresh();
+        }));
+        addRenderableWidget(button(x + 40 + third * 2, by, third, "HUD X +4: " + AutoBuilderConfig.hudXOffset(), () -> {
+            AutoBuilderConfig.adjustHudXOffset(4);
+            refresh();
+        }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, third, "HUD Y -4: " + AutoBuilderConfig.hudYOffset(), () -> {
+            AutoBuilderConfig.adjustHudYOffset(-4);
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + third, by, third, "HUD Y +4: " + AutoBuilderConfig.hudYOffset(), () -> {
+            AutoBuilderConfig.adjustHudYOffset(4);
+            refresh();
+        }));
+        addRenderableWidget(button(x + 40 + third * 2, by, third, "透明度: " + AutoBuilderConfig.hudOpacity(), () -> {
+            AutoBuilderConfig.adjustHudOpacity(16);
+            refresh();
+        }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, quarter, "透明度 -16", () -> {
+            AutoBuilderConfig.adjustHudOpacity(-16);
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + quarter, by, quarter, "透明度 +16", () -> {
+            AutoBuilderConfig.adjustHudOpacity(16);
+            refresh();
+        }));
+        addRenderableWidget(button(x + 40 + quarter * 2, by, quarter, "文字 -10%", () -> {
+            AutoBuilderConfig.adjustHudTextScalePercent(-10);
+            refresh();
+        }));
+        addRenderableWidget(button(x + 48 + quarter * 3, by, quarter, "文字 +10%: " + AutoBuilderConfig.hudTextScalePercent() + "%", () -> {
+            AutoBuilderConfig.adjustHudTextScalePercent(10);
+            refresh();
+        }));
+        by += row + gap + 10;
+
+        addRenderableWidget(button(x + 24, by, half, "素材不足表示: " + onOff(AutoBuilderConfig.hudShowMissingMaterials()), () -> {
+            AutoBuilderConfig.toggleHudShowMissingMaterials();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + half, by, half, "Baritone表示: " + onOff(AutoBuilderConfig.hudShowBaritoneStatus()), () -> {
+            AutoBuilderConfig.toggleHudShowBaritoneStatus();
+            refresh();
+        }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, third, "ターゲット: " + onOff(AutoBuilderConfig.hudShowTarget()), () -> {
+            AutoBuilderConfig.toggleHudShowTarget();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + third, by, third, "ETA: " + onOff(AutoBuilderConfig.hudShowEta()), () -> {
+            AutoBuilderConfig.toggleHudShowEta();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 40 + third * 2, by, third, "DEBUG: " + onOff(AutoBuilderConfig.hudShowDebug()), () -> {
+            AutoBuilderConfig.toggleHudShowDebug();
+            refresh();
+        }));
+        by += row + gap + 20;
+
+        addRenderableWidget(button(x + 24, by, full, "\u623b\u308b", this::backToMain));
+    }
+
+    private void initChests() {
+        int panelWidth = Math.min(680, this.width - 36);
+        int x = (this.width - panelWidth) / 2;
+        int y = panelY();
+        int full = panelWidth - 48;
+        int half = (full - 8) / 2;
+        int row = 24;
+        int gap = 6;
+        int by = y + 134;
+        List<BlockPos> chests = AutoBuilderConfig.materialChests();
+        int count = Math.min(8, chests.size());
+        for (int i = 0; i < count; i++) {
+            BlockPos pos = chests.get(i);
+            addRenderableWidget(button(x + 24, by, full, "\u524a\u9664: " + pos.getX() + " " + pos.getY() + " " + pos.getZ(), () -> {
+                MaterialChestProcess.removeRegisteredChest(pos);
+                refresh();
+            }));
+            by += row + gap;
+        }
+        by += gap;
+        addRenderableWidget(button(x + 24, by, half, "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u5168\u524a\u9664", () -> {
+            AutoBuilderConfig.clearMaterialChests();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + half, by, half, "\u623b\u308b", this::backToMain));
+    }
+
+    private void initMaterials() {
+        int panelWidth = Math.min(680, this.width - 36);
+        int x = (this.width - panelWidth) / 2;
+        int y = panelY();
+        int full = panelWidth - 48;
+        int half = (full - 8) / 2;
+        int by = y + panelHeight() - 76;
+
+        addRenderableWidget(button(x + 24, by, half, "\u4eca\u3059\u3050\u7d20\u6750\u88dc\u5145", () -> {
+            AutoBuildController.fetchMaterialsOnly();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + half, by, half, "\u623b\u308b", this::backToMain));
     }
 
     @Override
@@ -142,9 +308,16 @@ public final class AutoBuilderScreen extends Screen {
 
         int sx = x + 24;
         int sy = y + 108;
-        section(graphics, sx, sy, panelWidth - 48, 84, "01  \u30e2\u30fc\u30c9", "\u914d\u7f6e\u6e08\u307f\u8a2d\u8a08\u56f3\u306e\u81ea\u52d5\u5efa\u7bc9\u3001\u307e\u305f\u306fBaritone\u6574\u5730\u30e2\u30fc\u30c9\u3092\u958b\u59cb\u3057\u307e\u3059");
-        section(graphics, sx, sy + 96, panelWidth - 48, 134, "02  \u7d20\u6750\u88dc\u5145", "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3068\u6574\u5730\u4fdd\u7ba1\u30c1\u30a7\u30b9\u30c8\u304b\u3089\u5c11\u91cf\u305a\u3064\u88dc\u5145\u3057\u3001\u4e0d\u8db3\u5206\u306f\u4f5c\u6210/\u7cbe\u932c\u3057\u307e\u3059");
-        section(graphics, sx, sy + 242, panelWidth - 48, 74, "03  \u7ba1\u7406", "\u5efa\u7bc9\u9806\u5e8f\u3001\u6728\u6750/\u8272\u7d20\u6750\u306e\u4ee3\u7528\u3001\u7d20\u6750\u767b\u9332\u3001\u66f4\u65b0\u78ba\u8a8d\u3067\u3059");
+        switch (page) {
+            case SETTINGS -> drawSettingsPage(graphics, sx, sy, panelWidth - 48);
+            case CHESTS -> drawChestsPage(graphics, sx, sy, panelWidth - 48);
+            case MATERIALS -> drawMaterialsPage(graphics, sx, sy, panelWidth - 48);
+            default -> {
+                section(graphics, sx, sy, panelWidth - 48, 84, "01  \u30e2\u30fc\u30c9", "\u914d\u7f6e\u6e08\u307f\u8a2d\u8a08\u56f3\u306e\u81ea\u52d5\u5efa\u7bc9\u3001\u307e\u305f\u306fBaritone\u6574\u5730\u30e2\u30fc\u30c9\u3092\u958b\u59cb\u3057\u307e\u3059");
+                section(graphics, sx, sy + 96, panelWidth - 48, 134, "02  \u7d20\u6750\u88dc\u5145", "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3068\u6574\u5730\u4fdd\u7ba1\u30c1\u30a7\u30b9\u30c8\u304b\u3089\u5c11\u91cf\u305a\u3064\u88dc\u5145\u3057\u3001\u4e0d\u8db3\u5206\u306f\u4f5c\u6210/\u7cbe\u932c\u3057\u307e\u3059");
+                section(graphics, sx, sy + 242, panelWidth - 48, 74, "03  \u7ba1\u7406", "\u5efa\u7bc9\u9806\u5e8f\u3001\u6728\u6750/\u8272\u7d20\u6750\u306e\u4ee3\u7528\u3001\u7d20\u6750\u767b\u9332\u3001\u66f4\u65b0\u78ba\u8a8d\u3067\u3059");
+            }
+        }
 
         graphics.text(this.font, "\u8a2d\u8a08\u56f3: " + statusJa(BaritoneBridge.openSchematicStatus()), x + 24, y + panelHeight - 58, DIM);
         graphics.text(this.font, "\u81ea\u52d5\u5efa\u7bc9: " + statusJa(AutoBuildController.status()), x + 24, y + panelHeight - 42, statusColor(AutoBuildController.status()));
@@ -160,6 +333,11 @@ public final class AutoBuilderScreen extends Screen {
     private void refresh() {
         clearWidgets();
         init();
+    }
+
+    private void backToMain() {
+        page = Page.MAIN;
+        refresh();
     }
 
     private void openBaritoneClearMode() {
@@ -201,6 +379,18 @@ public final class AutoBuilderScreen extends Screen {
 
     private static String substituteLabel() {
         return "\u7d20\u6750\u4ee3\u7528: " + onOff(AutoBuilderConfig.autoSubstituteMaterials());
+    }
+
+    private static String hudEnabledLabel() {
+        return "HUD\u8868\u793a: " + onOff(AutoBuilderConfig.hudEnabled());
+    }
+
+    private static String hudModeLabel() {
+        return "HUD\u8868\u793a\u5f62\u5f0f: " + (AutoBuilderConfig.hudDetailed() ? "detailed" : "compact");
+    }
+
+    private static String hudPositionLabel() {
+        return "HUD\u4f4d\u7f6e: " + AutoBuilderConfig.hudPosition().name();
     }
 
     private static String buildOrderText() {
@@ -306,6 +496,51 @@ public final class AutoBuilderScreen extends Screen {
         graphics.text(this.font, note, x + 10, y + 20, DIM);
     }
 
+    private void drawSettingsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        section(graphics, x, y, width, 270, "HUD  \u72b6\u614bUI\u8a2d\u5b9a", "\u30b2\u30fc\u30e0\u4e2d\u306e\u5de6\u4e0b\u306a\u3069\u306b\u8868\u793a\u3059\u308bAutoBuilder\u72b6\u614bHUD\u3067\u3059");
+        graphics.text(this.font, "\u73fe\u5728: " + hudEnabledLabel() + " / " + hudModeLabel(), x + 10, y + 42, AutoBuilderConfig.hudEnabled() ? GREEN : RED);
+        graphics.text(this.font, "\u4f4d\u7f6e: " + AutoBuilderConfig.hudPosition() + "  X:" + AutoBuilderConfig.hudXOffset() + "  Y:" + AutoBuilderConfig.hudYOffset(), x + 10, y + 58, CYAN);
+        graphics.text(this.font, "\u80cc\u666f\u900f\u660e\u5ea6: " + AutoBuilderConfig.hudOpacity() + " / \u6587\u5b57: " + AutoBuilderConfig.hudTextScalePercent() + "%", x + 10, y + 74, DIM);
+        graphics.text(this.font, "\u8868\u793a\u9805\u76ee: \u7d20\u6750\u4e0d\u8db3=" + onOff(AutoBuilderConfig.hudShowMissingMaterials())
+                + " Baritone=" + onOff(AutoBuilderConfig.hudShowBaritoneStatus())
+                + " Target=" + onOff(AutoBuilderConfig.hudShowTarget()), x + 10, y + 90, DIM);
+        AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
+        graphics.text(this.font, "\u30d7\u30ec\u30d3\u30e5\u30fc: " + snapshot.state() + " / \u9032\u6357 " + String.format(java.util.Locale.ROOT, "%.1f%%", snapshot.progress())
+                + " / \u6b8b\u308a " + snapshot.remainingBlocks(), x + 10, y + 106, statusColor(snapshot.state()));
+    }
+
+    private void drawChestsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        section(graphics, x, y, width, 270, "MATERIAL CHESTS  \u7d20\u6750\u30c1\u30a7\u30b9\u30c8", "\u767b\u9332\u6e08\u307f\u306e\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3067\u3059\u3002\u30dc\u30bf\u30f3\u3067\u500b\u5225\u524a\u9664\u3067\u304d\u307e\u3059");
+        List<BlockPos> chests = AutoBuilderConfig.materialChests();
+        graphics.text(this.font, "\u767b\u9332\u6570: " + chests.size(), x + 10, y + 42, chests.isEmpty() ? ORANGE : GREEN);
+        int ly = y + 60;
+        int index = 1;
+        for (BlockPos pos : chests.subList(0, Math.min(8, chests.size()))) {
+            graphics.text(this.font, String.format(java.util.Locale.ROOT, "%02d  x:%d y:%d z:%d", index, pos.getX(), pos.getY(), pos.getZ()), x + 10, ly, TEXT);
+            ly += 18;
+            index++;
+        }
+        if (chests.size() > 8) {
+            graphics.text(this.font, "... +" + (chests.size() - 8), x + 10, ly, DIM);
+        }
+    }
+
+    private void drawMaterialsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        section(graphics, x, y, width, 270, "MATERIAL ANALYSIS  \u5fc5\u8981/\u4e0d\u8db3\u7d20\u6750", "\u76f4\u8fd1\u306eBaritone\u5efa\u7bc9\u304c\u8981\u6c42\u3057\u305f\u7d20\u6750\u5019\u88dc\u3067\u3059");
+        AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
+        graphics.text(this.font, "\u4e0d\u8db3\u5019\u88dc: " + snapshot.missingMaterialTypes() + "\u7a2e / \u7d20\u6750\u30c1\u30a7\u30b9\u30c8: " + snapshot.materialChestCount(), x + 10, y + 42, snapshot.missingMaterialTypes() > 0 ? ORANGE : GREEN);
+        int ly = y + 64;
+        int index = 1;
+        for (String item : AutoBuildController.neededMaterialSummaries(10)) {
+            graphics.text(this.font, String.format(java.util.Locale.ROOT, "%02d  %s", index, item), x + 10, ly, TEXT);
+            ly += 16;
+            index++;
+        }
+        if (index == 1) {
+            graphics.text(this.font, "\u307e\u3060\u5fc5\u8981\u7d20\u6750\u60c5\u5831\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5efa\u7bc9\u958b\u59cb\u5f8c\u306b\u66f4\u65b0\u3055\u308c\u307e\u3059\u3002", x + 10, ly, DIM);
+        }
+    }
+
     private void drawChip(GuiGraphicsExtractor graphics, int x, int y, String label, boolean on) {
         int color = on ? GREEN : RED;
         graphics.fill(x, y, x + 146, y + 16, on ? 0x3332FF88 : 0x33FF5548);
@@ -343,5 +578,12 @@ public final class AutoBuilderScreen extends Screen {
         graphics.fill(x, y + height - 1, x + width, y + height, color);
         graphics.fill(x, y, x + 1, y + height, color);
         graphics.fill(x + width - 1, y, x + width, y + height, color);
+    }
+
+    private enum Page {
+        MAIN,
+        SETTINGS,
+        CHESTS,
+        MATERIALS
     }
 }

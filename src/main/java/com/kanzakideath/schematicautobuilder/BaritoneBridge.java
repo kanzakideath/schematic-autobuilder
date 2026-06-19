@@ -73,6 +73,26 @@ public final class BaritoneBridge {
             "stripped_hyphae"
     );
 
+    public record BuildStats(
+            int totalBlocks,
+            int doneBlocks,
+            int remainingBlocks,
+            int failedBlocks,
+            int unreachableBlocks,
+            String target
+    ) {
+        public static BuildStats empty() {
+            return new BuildStats(0, 0, 0, 0, 0, "");
+        }
+
+        public double progress() {
+            if (totalBlocks <= 0) {
+                return 0.0D;
+            }
+            return Math.max(0.0D, Math.min(100.0D, doneBlocks * 100.0D / totalBlocks));
+        }
+    }
+
     private BaritoneBridge() {}
 
     public static boolean isAvailable() {
@@ -96,6 +116,50 @@ public final class BaritoneBridge {
             return active ? "Builder active" : "Builder idle";
         } catch (ReflectiveOperationException ignored) {
             return "Baritone ready";
+        }
+    }
+
+    public static String hudStatus() {
+        if (!isAvailable()) {
+            return "failed";
+        }
+        if (isBuilderPaused()) {
+            return "paused";
+        }
+        if (isPathing()) {
+            return isBuilderActive() ? "building/pathing" : "pathing";
+        }
+        if (isBuilderActive()) {
+            return "building";
+        }
+        return "idle";
+    }
+
+    public static BuildStats buildStats() {
+        Object builder = builderProcess();
+        if (builder == null) {
+            return BuildStats.empty();
+        }
+        try {
+            Object schematic = privateField(builder, "schematic");
+            Object incorrect = privateField(builder, "incorrectPositions");
+            Object observed = privateField(builder, "observedCompleted");
+            Object originObject = privateField(builder, "origin");
+            Object approxObject = privateField(builder, "approxPlaceable");
+            if (schematic == null || incorrect == null || !(originObject instanceof Vec3i origin)) {
+                return BuildStats.empty();
+            }
+            int remaining = Math.max(0, sizeOf(incorrect));
+            int done = Math.max(0, sizeOf(observed));
+            int total = Math.max(done + remaining, remaining);
+            String target = "";
+            if (incorrect instanceof Iterable<?> iterable) {
+                List<?> approx = approxObject instanceof List<?> list ? list : Collections.emptyList();
+                target = firstTargetDescription(schematic, iterable, origin, approx);
+            }
+            return new BuildStats(total, done, remaining, 0, 0, target);
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return BuildStats.empty();
         }
     }
 
@@ -210,6 +274,20 @@ public final class BaritoneBridge {
             Object result = pathing.getClass().getMethod("cancelEverything").invoke(pathing);
             return !(result instanceof Boolean) || (Boolean) result;
         } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
+    }
+
+    private static boolean isPathing() {
+        Object baritone = primaryBaritone();
+        if (baritone == null) {
+            return false;
+        }
+        try {
+            Object pathing = baritone.getClass().getMethod("getPathingBehavior").invoke(baritone);
+            Object result = pathing.getClass().getMethod("isPathing").invoke(pathing);
+            return Boolean.TRUE.equals(result);
+        } catch (ReflectiveOperationException | LinkageError ignored) {
             return false;
         }
     }
@@ -599,6 +677,59 @@ public final class BaritoneBridge {
         Field field = instance.getClass().getDeclaredField(name);
         field.setAccessible(true);
         return field.get(instance);
+    }
+
+    private static int sizeOf(Object value) {
+        if (value == null) {
+            return 0;
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.size();
+        }
+        try {
+            Object result = value.getClass().getMethod("size").invoke(value);
+            return result instanceof Number number ? number.intValue() : 0;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return 0;
+        }
+    }
+
+    private static String firstTargetDescription(Object schematic, Iterable<?> incorrect, Vec3i origin, List<?> approx) {
+        try {
+            Method desiredState = schematic.getClass().getMethod(
+                    "desiredState",
+                    int.class,
+                    int.class,
+                    int.class,
+                    BlockState.class,
+                    List.class
+            );
+            desiredState.setAccessible(true);
+            int scanned = 0;
+            for (Object posObject : incorrect) {
+                if (!(posObject instanceof BlockPos pos)) {
+                    continue;
+                }
+                BlockState current = MinecraftHolder.currentBlockState(pos);
+                Object desiredObject = desiredState.invoke(
+                        schematic,
+                        pos.getX() - origin.getX(),
+                        pos.getY() - origin.getY(),
+                        pos.getZ() - origin.getZ(),
+                        current,
+                        approx
+                );
+                if (desiredObject instanceof BlockState desired && !desired.isAir()) {
+                    return blockPath(desired.getBlock()) + " @ " + pos.getX() + "," + pos.getY() + "," + pos.getZ();
+                }
+                scanned++;
+                if (scanned >= 128) {
+                    break;
+                }
+            }
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        }
+        return "";
     }
 
     private static void setBooleanSetting(Object settings, String fieldName, boolean value) {

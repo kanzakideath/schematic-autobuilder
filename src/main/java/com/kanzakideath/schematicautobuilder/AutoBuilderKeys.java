@@ -24,9 +24,41 @@ public final class AutoBuilderKeys {
             KeyMapping.Category.MISC
     );
 
+    private static final KeyMapping START_OR_RESUME = new KeyMapping(
+            "key.schematicautobuilder.start_or_resume",
+            InputConstants.UNKNOWN.getType(),
+            InputConstants.UNKNOWN.getValue(),
+            KeyMapping.Category.MISC
+    );
+
+    private static final KeyMapping STOP_AUTOMATION = new KeyMapping(
+            "key.schematicautobuilder.stop_automation",
+            InputConstants.UNKNOWN.getType(),
+            InputConstants.UNKNOWN.getValue(),
+            KeyMapping.Category.MISC
+    );
+
+    private static final KeyMapping TOGGLE_HUD_DETAIL = new KeyMapping(
+            "key.schematicautobuilder.toggle_hud_detail",
+            InputConstants.UNKNOWN.getType(),
+            InputConstants.UNKNOWN.getValue(),
+            KeyMapping.Category.MISC
+    );
+
+    private static final KeyMapping TOGGLE_MATERIAL_CHEST_REGISTRATION = new KeyMapping(
+            "key.schematicautobuilder.toggle_material_chest_registration",
+            InputConstants.UNKNOWN.getType(),
+            InputConstants.UNKNOWN.getValue(),
+            KeyMapping.Category.MISC
+    );
+
     private static final KeyMapping[] ALL = new KeyMapping[]{
             OPEN_MENU,
-            PAUSE_AUTOMATION
+            PAUSE_AUTOMATION,
+            START_OR_RESUME,
+            STOP_AUTOMATION,
+            TOGGLE_HUD_DETAIL,
+            TOGGLE_MATERIAL_CHEST_REGISTRATION
     };
 
     private AutoBuilderKeys() {}
@@ -46,6 +78,18 @@ public final class AutoBuilderKeys {
         while (PAUSE_AUTOMATION.consumeClick()) {
             AutoBuildController.toggleSharedPauseKey();
         }
+        while (START_OR_RESUME.consumeClick()) {
+            AutoBuildController.startOrResumeAutoBuild();
+        }
+        while (STOP_AUTOMATION.consumeClick()) {
+            AutoBuildController.cancelAutomation();
+        }
+        while (TOGGLE_HUD_DETAIL.consumeClick()) {
+            AutoBuilderConfig.toggleHudDetailed();
+        }
+        while (TOGGLE_MATERIAL_CHEST_REGISTRATION.consumeClick()) {
+            AutoBuildController.toggleMaterialChestRegistration(minecraft);
+        }
         AutoBuildController.tick(minecraft);
     }
 
@@ -63,6 +107,22 @@ public final class AutoBuilderKeys {
             }
             if (PAUSE_AUTOMATION.matches(event)) {
                 return AutoBuildController.toggleSharedPauseKey();
+            }
+            if (START_OR_RESUME.matches(event)) {
+                AutoBuildController.startOrResumeAutoBuild();
+                return true;
+            }
+            if (STOP_AUTOMATION.matches(event)) {
+                AutoBuildController.cancelAutomation();
+                return true;
+            }
+            if (TOGGLE_HUD_DETAIL.matches(event)) {
+                AutoBuilderConfig.toggleHudDetailed();
+                return true;
+            }
+            if (TOGGLE_MATERIAL_CHEST_REGISTRATION.matches(event)) {
+                AutoBuildController.toggleMaterialChestRegistration(minecraft);
+                return true;
             }
         }
         return false;

@@ -9,7 +9,8 @@
   "client": [
     "MixinMinecraft",
     "MixinOptions",
-    "MixinKeyboardHandler"
+    "MixinKeyboardHandler",
+    "MixinHud"
   ],
   "mixins": []
 }

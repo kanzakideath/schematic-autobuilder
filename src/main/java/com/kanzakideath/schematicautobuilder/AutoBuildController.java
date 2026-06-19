@@ -3,9 +3,14 @@ package com.kanzakideath.schematicautobuilder;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 public final class AutoBuildController {
@@ -25,7 +30,9 @@ public final class AutoBuildController {
         SMELTING,
         WAITING_FOR_MATERIALS,
         PAUSED,
-        COMPLETE
+        COMPLETE,
+        CANCELLED,
+        ERROR
     }
 
     private enum WorkMode {
@@ -44,6 +51,8 @@ public final class AutoBuildController {
     private static boolean materialShortageNotified;
     private static String status = "Idle";
     private static Set<Item> lastNeededItems = Set.of();
+    private static AutoBuilderStatusSnapshot cachedSnapshot = AutoBuilderStatusSnapshot.empty();
+    private static long cachedSnapshotAtMs;
 
     private AutoBuildController() {}
 
@@ -79,6 +88,7 @@ public final class AutoBuildController {
     public static void startFullAutoBuild() {
         if (!BaritoneBridge.isAvailable()) {
             status = "Baritone not found";
+            mode = Mode.ERROR;
             message(status, ChatFormatting.RED);
             return;
         }
@@ -105,6 +115,37 @@ public final class AutoBuildController {
             message("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304b\u3089\u4e0d\u8db3\u5019\u88dc\u3092\u88dc\u5145\u3057\u307e\u3057\u305f: " + supplied, ChatFormatting.GREEN);
         }
         message("Full auto build started", ChatFormatting.AQUA);
+    }
+
+    public static void startOrResumeAutoBuild() {
+        if (mode == Mode.PAUSED) {
+            resume();
+            return;
+        }
+        startFullAutoBuild();
+    }
+
+    public static void cancelAutomation() {
+        MaterialChestProcess.stop("Cancelled");
+        MaterialCraftProcess.stop("Cancelled");
+        MaterialSmeltProcess.stop("Cancelled");
+        closeContainerIfNeeded();
+        BaritoneBridge.pauseBuilder();
+        BaritoneBridge.cancelPathing();
+        mode = Mode.CANCELLED;
+        pausedFrom = Mode.IDLE;
+        lastNeededItems = Set.of();
+        status = "Cancelled";
+        cachedSnapshotAtMs = 0L;
+        message("Auto builder stopped", ChatFormatting.YELLOW);
+    }
+
+    public static void toggleMaterialChestRegistration(Minecraft minecraft) {
+        if (MaterialChestProcess.isRegisteringChests()) {
+            MaterialChestProcess.stopChestRegistration();
+            return;
+        }
+        MaterialChestProcess.startChestRegistration(minecraft == null ? Minecraft.getInstance() : minecraft);
     }
 
     public static void fetchMaterialsOnly() {
@@ -185,6 +226,23 @@ public final class AutoBuildController {
 
     public static String modeName() {
         return mode.name();
+    }
+
+    public static AutoBuilderStatusSnapshot statusSnapshot() {
+        long now = System.currentTimeMillis();
+        if (now - cachedSnapshotAtMs > 250L) {
+            cachedSnapshot = createStatusSnapshot(now);
+            cachedSnapshotAtMs = now;
+        }
+        return cachedSnapshot;
+    }
+
+    public static List<String> neededMaterialSummaries(int limit) {
+        return lastNeededItems.stream()
+                .sorted(Comparator.comparing(AutoBuildController::itemId))
+                .limit(Math.max(0, limit))
+                .map(AutoBuildController::itemId)
+                .toList();
     }
 
     private static void monitorBuilder() {
@@ -492,6 +550,109 @@ public final class AutoBuildController {
         status = "Idle";
         lastNeededItems = Set.of();
         message("Auto builder resumed", ChatFormatting.GREEN);
+    }
+
+    private static AutoBuilderStatusSnapshot createStatusSnapshot(long now) {
+        BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
+        int missingTypes = missingMaterialTypes();
+        int missingItems = missingTypes <= 0 ? 0 : -1;
+        String modeLabel = hudModeLabel();
+        String stateLabel = hudStateLabel();
+        String actionLabel = hudActionLabel(stats);
+        String target = MaterialChestProcess.isRunning() && !MaterialChestProcess.currentTargetSummary().isBlank()
+                ? "chest @ " + MaterialChestProcess.currentTargetSummary()
+                : stats.target();
+        return new AutoBuilderStatusSnapshot(
+                modeLabel,
+                stateLabel,
+                actionLabel,
+                stats.progress(),
+                stats.totalBlocks(),
+                stats.doneBlocks(),
+                stats.remainingBlocks(),
+                stats.failedBlocks(),
+                stats.unreachableBlocks(),
+                missingTypes,
+                missingItems,
+                AutoBuilderConfig.materialChestCount(),
+                BaritoneBridge.hudStatus(),
+                target == null ? "" : target,
+                "--:--",
+                now
+        );
+    }
+
+    private static String hudModeLabel() {
+        if (MaterialChestProcess.isRegisteringChests()) {
+            return "MATERIAL CHEST REGISTRATION";
+        }
+        if (mode == Mode.BUILDING || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING || mode == Mode.WAITING_FOR_MATERIALS || mode == Mode.PAUSED || mode == Mode.COMPLETE) {
+            return "AUTO BUILD";
+        }
+        if (BaritoneBridge.isClearingAreaActive() || lastWorkMode == WorkMode.CLEAR_AREA) {
+            return "TERRAIN CLEAR";
+        }
+        return "IDLE";
+    }
+
+    private static String hudStateLabel() {
+        if (MaterialChestProcess.isRegisteringChests()) {
+            return "素材チェスト登録中";
+        }
+        return switch (mode) {
+            case BUILDING -> "実行中";
+            case FETCHING -> "チェスト補充中";
+            case CRAFTING -> "素材作成中";
+            case SMELTING -> "精錬中";
+            case WAITING_FOR_MATERIALS -> "素材不足";
+            case PAUSED -> "一時停止";
+            case COMPLETE -> "完了";
+            case CANCELLED -> "停止";
+            case ERROR -> "エラー";
+            default -> BaritoneBridge.isClearingAreaActive() ? "整地中" : "待機中";
+        };
+    }
+
+    private static String hudActionLabel(BaritoneBridge.BuildStats stats) {
+        if (MaterialChestProcess.isRegisteringChests()) {
+            return "素材チェストを右クリックで登録";
+        }
+        if (MaterialChestProcess.isRunning()) {
+            return MaterialChestProcess.status();
+        }
+        if (MaterialCraftProcess.isRunning()) {
+            return MaterialCraftProcess.status();
+        }
+        if (MaterialSmeltProcess.isRunning()) {
+            return MaterialSmeltProcess.status();
+        }
+        return switch (mode) {
+            case BUILDING -> stats.target().isBlank() ? "Baritone 移動要求中" : "ブロック設置中";
+            case WAITING_FOR_MATERIALS -> "素材探索中";
+            case PAUSED -> "一時停止中";
+            case COMPLETE -> "完了";
+            case CANCELLED -> "停止";
+            case ERROR -> "エラー";
+            default -> status;
+        };
+    }
+
+    private static int missingMaterialTypes() {
+        String rawStatus = status == null ? "" : status;
+        String lowerStatus = rawStatus.toLowerCase(Locale.ROOT);
+        if (mode != Mode.WAITING_FOR_MATERIALS && !MATERIAL_SHORTAGE.equals(rawStatus) && !lowerStatus.contains("material") && !rawStatus.contains("素材")) {
+            return 0;
+        }
+        Set<Item> needed = rememberNeededItems();
+        if (needed.isEmpty()) {
+            return 0;
+        }
+        return needed.size();
+    }
+
+    private static String itemId(Item item) {
+        Identifier key = BuiltInRegistries.ITEM.getKey(item);
+        return key == null ? item.toString() : key.toString();
     }
 
     private static void closeContainerIfNeeded() {

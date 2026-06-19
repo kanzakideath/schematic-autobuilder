@@ -15,6 +15,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.BarrelBlock;
 import net.minecraft.world.level.block.TrappedChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
@@ -109,6 +110,25 @@ public final class MaterialChestProcess {
 
     public static boolean isRegisteringChests() {
         return registeringChests;
+    }
+
+    public static String currentTargetSummary() {
+        return target == null ? "" : shortPos(target);
+    }
+
+    public static List<String> registeredChestSummaries(int limit) {
+        List<BlockPos> chests = AutoBuilderConfig.materialChests();
+        int max = Math.max(0, Math.min(limit, chests.size()));
+        List<String> result = new ArrayList<>();
+        for (int i = 0; i < max; i++) {
+            result.add(shortPos(chests.get(i)));
+        }
+        return result;
+    }
+
+    public static void removeRegisteredChest(BlockPos pos) {
+        AutoBuilderConfig.removeMaterialChest(pos);
+        status = pos == null ? status : "Removed material chest: " + shortPos(pos);
     }
 
     public static void startChestRegistration(Minecraft minecraft) {
@@ -530,7 +550,9 @@ public final class MaterialChestProcess {
             return false;
         }
         BlockState state = minecraft.level.getBlockState(pos);
-        return state.getBlock() instanceof ChestBlock || state.getBlock() instanceof TrappedChestBlock;
+        return state.getBlock() instanceof ChestBlock
+                || state.getBlock() instanceof TrappedChestBlock
+                || state.getBlock() instanceof BarrelBlock;
     }
 
     private static String shortPos(BlockPos pos) {

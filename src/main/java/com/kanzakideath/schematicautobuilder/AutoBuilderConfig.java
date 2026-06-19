@@ -15,12 +15,31 @@ import java.util.Properties;
 
 public final class AutoBuilderConfig {
 
+    public enum HudPosition {
+        LEFT_BOTTOM,
+        LEFT_TOP,
+        RIGHT_BOTTOM,
+        RIGHT_TOP
+    }
+
     private static final List<BlockPos> MATERIAL_CHESTS = new ArrayList<>();
     private static boolean autoFetchMaterials = true;
     private static boolean autoCraftMaterials = true;
     private static boolean startBuildAfterFetch = true;
     private static boolean topDownBuild = true;
     private static boolean autoSubstituteMaterials = true;
+    private static boolean hudEnabled = true;
+    private static HudPosition hudPosition = HudPosition.LEFT_BOTTOM;
+    private static int hudXOffset = 8;
+    private static int hudYOffset = 58;
+    private static boolean hudDetailed;
+    private static int hudOpacity = 150;
+    private static int hudTextScalePercent = 100;
+    private static boolean hudShowMissingMaterials = true;
+    private static boolean hudShowBaritoneStatus = true;
+    private static boolean hudShowTarget = true;
+    private static boolean hudShowEta = true;
+    private static boolean hudShowDebug;
     private static int keyMigrationVersion;
 
     private AutoBuilderConfig() {}
@@ -40,6 +59,18 @@ public final class AutoBuilderConfig {
         startBuildAfterFetch = Boolean.parseBoolean(properties.getProperty("startBuildAfterFetch", "true"));
         topDownBuild = Boolean.parseBoolean(properties.getProperty("topDownBuild", "true"));
         autoSubstituteMaterials = Boolean.parseBoolean(properties.getProperty("autoSubstituteMaterials", "true"));
+        hudEnabled = Boolean.parseBoolean(properties.getProperty("hudEnabled", "true"));
+        hudPosition = parseHudPosition(properties.getProperty("hudPosition", HudPosition.LEFT_BOTTOM.name()));
+        hudXOffset = clamp(parseInt(properties.getProperty("hudXOffset", "8")), -400, 400);
+        hudYOffset = clamp(parseInt(properties.getProperty("hudYOffset", "58")), -400, 400);
+        hudDetailed = Boolean.parseBoolean(properties.getProperty("hudDetailed", "false"));
+        hudOpacity = clamp(parseInt(properties.getProperty("hudOpacity", "150")), 32, 220);
+        hudTextScalePercent = clamp(parseInt(properties.getProperty("hudTextScalePercent", "100")), 70, 140);
+        hudShowMissingMaterials = Boolean.parseBoolean(properties.getProperty("hudShowMissingMaterials", "true"));
+        hudShowBaritoneStatus = Boolean.parseBoolean(properties.getProperty("hudShowBaritoneStatus", "true"));
+        hudShowTarget = Boolean.parseBoolean(properties.getProperty("hudShowTarget", "true"));
+        hudShowEta = Boolean.parseBoolean(properties.getProperty("hudShowEta", "true"));
+        hudShowDebug = Boolean.parseBoolean(properties.getProperty("hudShowDebug", "false"));
         keyMigrationVersion = parseInt(properties.getProperty("keyMigrationVersion", "0"));
         for (String encoded : properties.getProperty("materialChests", "").split(";")) {
             BlockPos pos = decodePos(encoded);
@@ -56,6 +87,18 @@ public final class AutoBuilderConfig {
         properties.setProperty("startBuildAfterFetch", Boolean.toString(startBuildAfterFetch));
         properties.setProperty("topDownBuild", Boolean.toString(topDownBuild));
         properties.setProperty("autoSubstituteMaterials", Boolean.toString(autoSubstituteMaterials));
+        properties.setProperty("hudEnabled", Boolean.toString(hudEnabled));
+        properties.setProperty("hudPosition", hudPosition.name());
+        properties.setProperty("hudXOffset", Integer.toString(hudXOffset));
+        properties.setProperty("hudYOffset", Integer.toString(hudYOffset));
+        properties.setProperty("hudDetailed", Boolean.toString(hudDetailed));
+        properties.setProperty("hudOpacity", Integer.toString(hudOpacity));
+        properties.setProperty("hudTextScalePercent", Integer.toString(hudTextScalePercent));
+        properties.setProperty("hudShowMissingMaterials", Boolean.toString(hudShowMissingMaterials));
+        properties.setProperty("hudShowBaritoneStatus", Boolean.toString(hudShowBaritoneStatus));
+        properties.setProperty("hudShowTarget", Boolean.toString(hudShowTarget));
+        properties.setProperty("hudShowEta", Boolean.toString(hudShowEta));
+        properties.setProperty("hudShowDebug", Boolean.toString(hudShowDebug));
         properties.setProperty("keyMigrationVersion", Integer.toString(keyMigrationVersion));
         List<String> encoded = new ArrayList<>();
         for (BlockPos pos : MATERIAL_CHESTS) {
@@ -117,6 +160,115 @@ public final class AutoBuilderConfig {
         save();
     }
 
+    public static synchronized boolean hudEnabled() {
+        return hudEnabled;
+    }
+
+    public static synchronized void toggleHudEnabled() {
+        hudEnabled = !hudEnabled;
+        save();
+    }
+
+    public static synchronized HudPosition hudPosition() {
+        return hudPosition;
+    }
+
+    public static synchronized void cycleHudPosition() {
+        HudPosition[] values = HudPosition.values();
+        hudPosition = values[(hudPosition.ordinal() + 1) % values.length];
+        save();
+    }
+
+    public static synchronized int hudXOffset() {
+        return hudXOffset;
+    }
+
+    public static synchronized void adjustHudXOffset(int delta) {
+        hudXOffset = clamp(hudXOffset + delta, -400, 400);
+        save();
+    }
+
+    public static synchronized int hudYOffset() {
+        return hudYOffset;
+    }
+
+    public static synchronized void adjustHudYOffset(int delta) {
+        hudYOffset = clamp(hudYOffset + delta, -400, 400);
+        save();
+    }
+
+    public static synchronized boolean hudDetailed() {
+        return hudDetailed;
+    }
+
+    public static synchronized void toggleHudDetailed() {
+        hudDetailed = !hudDetailed;
+        save();
+    }
+
+    public static synchronized int hudOpacity() {
+        return hudOpacity;
+    }
+
+    public static synchronized void adjustHudOpacity(int delta) {
+        hudOpacity = clamp(hudOpacity + delta, 32, 220);
+        save();
+    }
+
+    public static synchronized int hudTextScalePercent() {
+        return hudTextScalePercent;
+    }
+
+    public static synchronized void adjustHudTextScalePercent(int delta) {
+        hudTextScalePercent = clamp(hudTextScalePercent + delta, 70, 140);
+        save();
+    }
+
+    public static synchronized boolean hudShowMissingMaterials() {
+        return hudShowMissingMaterials;
+    }
+
+    public static synchronized void toggleHudShowMissingMaterials() {
+        hudShowMissingMaterials = !hudShowMissingMaterials;
+        save();
+    }
+
+    public static synchronized boolean hudShowBaritoneStatus() {
+        return hudShowBaritoneStatus;
+    }
+
+    public static synchronized void toggleHudShowBaritoneStatus() {
+        hudShowBaritoneStatus = !hudShowBaritoneStatus;
+        save();
+    }
+
+    public static synchronized boolean hudShowTarget() {
+        return hudShowTarget;
+    }
+
+    public static synchronized void toggleHudShowTarget() {
+        hudShowTarget = !hudShowTarget;
+        save();
+    }
+
+    public static synchronized boolean hudShowEta() {
+        return hudShowEta;
+    }
+
+    public static synchronized void toggleHudShowEta() {
+        hudShowEta = !hudShowEta;
+        save();
+    }
+
+    public static synchronized boolean hudShowDebug() {
+        return hudShowDebug;
+    }
+
+    public static synchronized void toggleHudShowDebug() {
+        hudShowDebug = !hudShowDebug;
+        save();
+    }
+
     public static synchronized void addMaterialChest(BlockPos pos) {
         if (!MATERIAL_CHESTS.contains(pos)) {
             MATERIAL_CHESTS.add(pos.immutable());
@@ -131,6 +283,12 @@ public final class AutoBuilderConfig {
     public static synchronized void clearMaterialChests() {
         MATERIAL_CHESTS.clear();
         save();
+    }
+
+    public static synchronized void removeMaterialChest(BlockPos pos) {
+        if (pos != null && MATERIAL_CHESTS.remove(pos)) {
+            save();
+        }
     }
 
     public static synchronized int materialChestCount() {
@@ -179,5 +337,17 @@ public final class AutoBuilderConfig {
         } catch (NumberFormatException ignored) {
             return 0;
         }
+    }
+
+    private static HudPosition parseHudPosition(String value) {
+        try {
+            return HudPosition.valueOf(value);
+        } catch (IllegalArgumentException | NullPointerException ignored) {
+            return HudPosition.LEFT_BOTTOM;
+        }
+    }
+
+    private static int clamp(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
     }
 }
