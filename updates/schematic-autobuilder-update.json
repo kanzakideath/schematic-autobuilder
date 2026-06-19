@@ -1,6 +1,6 @@
-﻿{
-    "version":  "0.2.5+26.2",
-    "url":  "https://raw.githubusercontent.com/kanzakideath/schematic-autobuilder/main/updates/schematic-autobuilder-26.2-1f327c623e30.jar",
-    "sha256":  "1f327c623e307e3cef67e3d94989884f7f2b62a42c57ce738e7edbaa0ce72db4",
-    "fileName":  "schematic-autobuilder-26.2-latest.jar"
+{
+  "version": "0.2.5+26.2",
+  "url": "https://raw.githubusercontent.com/kanzakideath/schematic-autobuilder/main/updates/schematic-autobuilder-26.2-1f327c623e30.jar",
+  "sha256": "1f327c623e307e3cef67e3d94989884f7f2b62a42c57ce738e7edbaa0ce72db4",
+  "fileName": "schematic-autobuilder-26.2-latest.jar"
 }
