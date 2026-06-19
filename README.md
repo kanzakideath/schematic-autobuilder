@@ -15,7 +15,7 @@ build workflows.
 
 ## Controls
 
-- Press `J` in game to open the Schematic Auto Builder menu.
+- Press `J` to open the Schematic Auto Builder menu. The key is handled globally, so it can open from the title screen, menus, and in-game.
 - Press `K` in game to pause or resume automation.
 - Both keybinds are configurable in Minecraft's Controls menu.
 
@@ -50,5 +50,5 @@ pathing.
 Output:
 
 ```text
-build/libs/schematic-autobuilder-0.2.0+26.2.jar
+build/libs/schematic-autobuilder-0.2.4+26.2.jar
 ```

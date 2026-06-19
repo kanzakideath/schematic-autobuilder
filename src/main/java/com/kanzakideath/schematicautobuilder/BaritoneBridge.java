@@ -69,7 +69,7 @@ public final class BaritoneBridge {
             Object result = method.invoke(builder);
             return result == null ? "No schematic status" : result.toString();
         } catch (ReflectiveOperationException ignored) {
-            return "Open a Litematica/Schematica placement before starting";
+            return legacyOpenSchematicStatus();
         }
     }
 
@@ -244,17 +244,64 @@ public final class BaritoneBridge {
 
     private static boolean startLegacyPlacedSchematicBuild(Object builder) {
         try {
-            Method litematica = builder.getClass().getMethod("buildOpenLitematic", int.class);
-            litematica.invoke(builder, 0);
-            return true;
-        } catch (ReflectiveOperationException ignored) {
-            try {
+            if (hasLegacyLitematicaPlacement()) {
+                Method litematica = builder.getClass().getMethod("buildOpenLitematic", int.class);
+                litematica.invoke(builder, 0);
+                return isBuilderActive();
+            }
+            if (hasLegacySchematicaPlacement()) {
                 Method schematica = builder.getClass().getMethod("buildOpenSchematic");
                 schematica.invoke(builder);
-                return true;
-            } catch (ReflectiveOperationException ignoredAgain) {
+                return isBuilderActive();
+            }
+            return false;
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
+    }
+
+    private static String legacyOpenSchematicStatus() {
+        if (hasLegacyLitematicaPlacement()) {
+            return "Litematica placement ready";
+        }
+        if (hasLegacySchematicaPlacement()) {
+            return "Schematica placement ready";
+        }
+        return "No placed Litematica/Schematica schematic found";
+    }
+
+    private static boolean hasLegacyLitematicaPlacement() {
+        try {
+            Class<?> helper = Class.forName("baritone.utils.schematic.litematica.LitematicaHelper");
+            Method present = helper.getMethod("isLitematicaPresent");
+            if (!Boolean.TRUE.equals(present.invoke(null))) {
                 return false;
             }
+            try {
+                Method loadedCount = helper.getMethod("loadedSchematicCount");
+                Object count = loadedCount.invoke(null);
+                return count instanceof Integer && (Integer) count > 0;
+            } catch (NoSuchMethodException ignored) {
+                Method hasLoaded = helper.getMethod("hasLoadedSchematic", int.class);
+                return Boolean.TRUE.equals(hasLoaded.invoke(null, 0));
+            }
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            return false;
+        }
+    }
+
+    private static boolean hasLegacySchematicaPlacement() {
+        try {
+            Class<?> helper = Class.forName("baritone.utils.schematic.schematica.SchematicaHelper");
+            Method present = helper.getMethod("isSchematicaPresent");
+            if (!Boolean.TRUE.equals(present.invoke(null))) {
+                return false;
+            }
+            Method open = helper.getMethod("getOpenSchematic");
+            Object optional = open.invoke(null);
+            return optional instanceof java.util.Optional<?> && ((java.util.Optional<?>) optional).isPresent();
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+            return false;
         }
     }
 

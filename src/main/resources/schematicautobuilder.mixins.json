@@ -8,8 +8,8 @@
   },
   "client": [
     "MixinMinecraft",
-    "MixinOptions"
+    "MixinOptions",
+    "MixinKeyboardHandler"
   ],
   "mixins": []
 }
-
