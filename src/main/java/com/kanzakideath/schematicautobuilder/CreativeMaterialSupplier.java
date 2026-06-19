@@ -6,11 +6,16 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
+import java.util.List;
 import java.lang.reflect.Method;
 import java.util.Set;
 
 public final class CreativeMaterialSupplier {
+    private static final int MAX_SUPPLIED_PER_PASS = 6;
+    private static final int RESERVED_EMPTY_SLOTS = 4;
 
     private CreativeMaterialSupplier() {}
 
@@ -24,9 +29,17 @@ public final class CreativeMaterialSupplier {
         }
         int supplied = 0;
         Set<Integer> reservedSlots = new HashSet<>();
-        for (Item item : neededItems) {
+        List<Item> orderedItems = new ArrayList<>(neededItems);
+        orderedItems.sort(Comparator.comparing(Item::toString));
+        for (Item item : orderedItems) {
             if (item == null || item == Items.AIR) {
                 continue;
+            }
+            if (hasUsableStack(player, item)) {
+                continue;
+            }
+            if (supplied >= MAX_SUPPLIED_PER_PASS) {
+                break;
             }
             int inventorySlot = preferredSlot(player, item, neededItems, reservedSlots);
             if (inventorySlot < 0) {
@@ -52,9 +65,11 @@ public final class CreativeMaterialSupplier {
                 return i;
             }
         }
-        for (int i = 0; i < player.getInventory().getNonEquipmentItems().size(); i++) {
-            if (!reservedSlots.contains(i) && player.getInventory().getNonEquipmentItems().get(i).isEmpty()) {
-                return i;
+        if (emptySlots(player, reservedSlots) > RESERVED_EMPTY_SLOTS) {
+            for (int i = 0; i < player.getInventory().getNonEquipmentItems().size(); i++) {
+                if (!reservedSlots.contains(i) && player.getInventory().getNonEquipmentItems().get(i).isEmpty()) {
+                    return i;
+                }
             }
         }
         int replaceable = replacementSlot(player, neededItems, reservedSlots, 9, player.getInventory().getNonEquipmentItems().size());
@@ -65,11 +80,16 @@ public final class CreativeMaterialSupplier {
         if (replaceable >= 0) {
             return replaceable;
         }
-        replaceable = anySlot(player, reservedSlots, 9, player.getInventory().getNonEquipmentItems().size());
-        if (replaceable >= 0) {
-            return replaceable;
+        return -1;
+    }
+
+    private static boolean hasUsableStack(LocalPlayer player, Item item) {
+        for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
+            if (!stack.isEmpty() && stack.is(item)) {
+                return true;
+            }
         }
-        return anySlot(player, reservedSlots, 0, 9);
+        return false;
     }
 
     private static int replacementSlot(LocalPlayer player, Set<Item> neededItems, Set<Integer> reservedSlots, int start, int end) {
@@ -94,6 +114,16 @@ public final class CreativeMaterialSupplier {
             }
         }
         return -1;
+    }
+
+    private static int emptySlots(LocalPlayer player, Set<Integer> reservedSlots) {
+        int empty = 0;
+        for (int i = 0; i < player.getInventory().getNonEquipmentItems().size(); i++) {
+            if (!reservedSlots.contains(i) && player.getInventory().getNonEquipmentItems().get(i).isEmpty()) {
+                empty++;
+            }
+        }
+        return empty;
     }
 
     private static boolean setCreativeSlot(Minecraft minecraft, LocalPlayer player, int inventorySlot, ItemStack stack) {

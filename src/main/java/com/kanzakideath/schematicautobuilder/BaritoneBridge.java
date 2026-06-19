@@ -2,8 +2,11 @@ package com.kanzakideath.schematicautobuilder;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.input.KeyEvent;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -204,7 +207,7 @@ public final class BaritoneBridge {
         setBooleanSetting(settings, "buildIgnoreExisting", false);
         setBooleanSetting(settings, "buildIgnoreDirection", false);
         setBooleanSetting(settings, "buildOnlySelection", false);
-        setBooleanSetting(settings, "buildInLayers", AutoBuilderConfig.topDownBuild());
+        setBooleanSetting(settings, "buildInLayers", true);
         setBooleanSetting(settings, "layerOrder", AutoBuilderConfig.topDownBuild());
         setBooleanSetting(settings, "skipFailedLayers", false);
         setBooleanSetting(settings, "okIfWater", false);
@@ -215,6 +218,26 @@ public final class BaritoneBridge {
         clearCollectionSetting(settings, "okIfAir");
         clearMapSetting(settings, "buildValidSubstitutes");
         clearMapSetting(settings, "buildSubstitutes");
+    }
+
+    public static void configureTemporaryScaffoldItems(Set<Item> neededItems) {
+        Object settings = settings();
+        Minecraft minecraft = Minecraft.getInstance();
+        if (settings == null || minecraft.player == null) {
+            return;
+        }
+        Set<Item> needed = neededItems == null ? Set.of() : neededItems;
+        Set<Item> candidates = new HashSet<>();
+        for (ItemStack stack : minecraft.player.getInventory().getNonEquipmentItems()) {
+            if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem) || needed.contains(stack.getItem())) {
+                continue;
+            }
+            candidates.add(stack.getItem());
+            if (candidates.size() >= 16) {
+                break;
+            }
+        }
+        addCollectionSettingValues(settings, "acceptableThrowawayItems", candidates);
     }
 
     public static Set<Item> currentNeededBuildItems() {
@@ -339,6 +362,27 @@ public final class BaritoneBridge {
             Object value = valueField.get(setting);
             if (value instanceof Map<?, ?> map) {
                 map.clear();
+            }
+        } catch (ReflectiveOperationException | LinkageError | UnsupportedOperationException ignored) {
+        }
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void addCollectionSettingValues(Object settings, String fieldName, Collection<?> additions) {
+        if (additions == null || additions.isEmpty()) {
+            return;
+        }
+        try {
+            Field settingField = settings.getClass().getField(fieldName);
+            Object setting = settingField.get(settings);
+            Field valueField = setting.getClass().getField("value");
+            Object value = valueField.get(setting);
+            if (value instanceof Collection collection) {
+                for (Object addition : additions) {
+                    if (!collection.contains(addition)) {
+                        collection.add(addition);
+                    }
+                }
             }
         } catch (ReflectiveOperationException | LinkageError | UnsupportedOperationException ignored) {
         }

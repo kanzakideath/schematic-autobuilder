@@ -260,6 +260,11 @@ public final class AutoBuildController {
             message(status + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
             return;
         }
+        if (result.inventoryFull()) {
+            refetchGuardTicks = RESUME_REFETCH_GUARD_TICKS;
+            resumeBuildAfterMaterialChange("\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304c\u3044\u3063\u3071\u3044\u306e\u305f\u3081\u3001\u53d6\u5f97\u6e08\u307f\u306e\u7d20\u6750\u3067\u5efa\u7bc9\u306b\u623b\u308a\u307e\u3059");
+            return;
+        }
         if (tryMaterialCreationForBuild("\u88dc\u5145\u3057\u305f\u7d20\u6750\u304b\u3089\u4f5c\u308c\u308b\u5206\u3092\u4f5c\u6210\u4e2d")) {
             return;
         }
@@ -320,6 +325,7 @@ public final class AutoBuildController {
     }
 
     private static void resumeBuildAfterMaterialChange(String resumeStatus) {
+        BaritoneBridge.cancelPathing();
         BaritoneBridge.resumeBuilder();
         materialShortageNotified = false;
         if (!BaritoneBridge.startPlacedSchematicBuild()) {
@@ -368,6 +374,7 @@ public final class AutoBuildController {
         if (!current.isEmpty()) {
             lastNeededItems = Set.copyOf(current);
         }
+        BaritoneBridge.configureTemporaryScaffoldItems(lastNeededItems);
         return lastNeededItems;
     }
 
@@ -400,6 +407,9 @@ public final class AutoBuildController {
         if (!AutoBuilderConfig.autoCraftMaterials()) {
             return false;
         }
+        if (inventoryAlmostFull()) {
+            return false;
+        }
         Set<Item> needed = rememberNeededItems();
         if (needed.isEmpty()) {
             return false;
@@ -417,6 +427,20 @@ public final class AutoBuildController {
             return true;
         }
         return false;
+    }
+
+    private static boolean inventoryAlmostFull() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) {
+            return false;
+        }
+        int empty = 0;
+        for (int i = 0; i < player.getInventory().getNonEquipmentItems().size(); i++) {
+            if (player.getInventory().getNonEquipmentItems().get(i).isEmpty()) {
+                empty++;
+            }
+        }
+        return empty <= 2;
     }
 
     private static void pause() {

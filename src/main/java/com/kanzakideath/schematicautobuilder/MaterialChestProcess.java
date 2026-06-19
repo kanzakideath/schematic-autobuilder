@@ -35,6 +35,7 @@ public final class MaterialChestProcess {
     private static final int EXACT_ITEM_STACK_LIMIT = 4;
     private static final int INGREDIENT_STACK_LIMIT = 2;
     private static final int FUEL_STACK_LIMIT = 1;
+    private static final int SCAFFOLD_STACKS_TO_KEEP = 1;
 
     public interface FetchCallback {
         void finished(FetchResult result);
@@ -270,6 +271,13 @@ public final class MaterialChestProcess {
             clickCooldown--;
             return;
         }
+        int junkSlot = bestJunkSlot(menu);
+        if (junkSlot >= 0) {
+            minecraft.gameMode.handleContainerInput(menu.containerId, junkSlot, 0, ContainerInput.QUICK_MOVE, player);
+            clickCooldown = 3;
+            status = "\u4e0d\u8981\u30a2\u30a4\u30c6\u30e0\u3092\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3078\u53ce\u7d0d\u4e2d";
+            return;
+        }
         if (shouldStopFetching(player)) {
             player.closeContainer();
             boolean took = totalTakenStacks > 0 || inventoryHasUsefulMaterial(player);
@@ -315,6 +323,50 @@ public final class MaterialChestProcess {
             }
         }
         return usefulSlot;
+    }
+
+    private static int bestJunkSlot(ChestMenu menu) {
+        if (neededItems.isEmpty()) {
+            return -1;
+        }
+        int chestSlots = Math.max(0, menu.slots.size() - 36);
+        int keptScaffoldStacks = 0;
+        for (int i = chestSlots; i < menu.slots.size(); i++) {
+            Slot slot = menu.getSlot(i);
+            ItemStack stack = slot.getItem();
+            if (stack.isEmpty() || isProtectedInventoryItem(stack) || isBuildMaterial(stack) || !chestHasEmptySlot(menu, chestSlots)) {
+                continue;
+            }
+            if (stack.getItem() instanceof BlockItem) {
+                if (keptScaffoldStacks < SCAFFOLD_STACKS_TO_KEEP) {
+                    keptScaffoldStacks++;
+                    continue;
+                }
+                return i;
+            }
+            return i;
+        }
+        return -1;
+    }
+
+    private static boolean chestHasEmptySlot(ChestMenu menu, int chestSlots) {
+        for (int i = 0; i < chestSlots; i++) {
+            if (menu.getSlot(i).getItem().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isProtectedInventoryItem(ItemStack stack) {
+        if (stack.getMaxDamage() > 1) {
+            return true;
+        }
+        if (stack.is(Items.WATER_BUCKET) || stack.is(Items.LAVA_BUCKET) || stack.is(Items.BUCKET)) {
+            return true;
+        }
+        String id = stack.getItem().toString();
+        return id.endsWith("_boat") || id.endsWith("_chest_boat") || id.contains("shulker_box");
     }
 
     private static void advanceAfterChest() {
