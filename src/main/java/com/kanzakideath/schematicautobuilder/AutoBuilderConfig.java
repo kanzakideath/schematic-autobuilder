@@ -19,6 +19,7 @@ public final class AutoBuilderConfig {
     private static boolean autoFetchMaterials = true;
     private static boolean autoCraftMaterials = true;
     private static boolean startBuildAfterFetch = true;
+    private static boolean topDownBuild = true;
     private static int keyMigrationVersion;
 
     private AutoBuilderConfig() {}
@@ -36,6 +37,7 @@ public final class AutoBuilderConfig {
         autoFetchMaterials = Boolean.parseBoolean(properties.getProperty("autoFetchMaterials", "true"));
         autoCraftMaterials = Boolean.parseBoolean(properties.getProperty("autoCraftMaterials", "true"));
         startBuildAfterFetch = Boolean.parseBoolean(properties.getProperty("startBuildAfterFetch", "true"));
+        topDownBuild = Boolean.parseBoolean(properties.getProperty("topDownBuild", "true"));
         keyMigrationVersion = parseInt(properties.getProperty("keyMigrationVersion", "0"));
         for (String encoded : properties.getProperty("materialChests", "").split(";")) {
             BlockPos pos = decodePos(encoded);
@@ -50,6 +52,7 @@ public final class AutoBuilderConfig {
         properties.setProperty("autoFetchMaterials", Boolean.toString(autoFetchMaterials));
         properties.setProperty("autoCraftMaterials", Boolean.toString(autoCraftMaterials));
         properties.setProperty("startBuildAfterFetch", Boolean.toString(startBuildAfterFetch));
+        properties.setProperty("topDownBuild", Boolean.toString(topDownBuild));
         properties.setProperty("keyMigrationVersion", Integer.toString(keyMigrationVersion));
         List<String> encoded = new ArrayList<>();
         for (BlockPos pos : MATERIAL_CHESTS) {
@@ -90,6 +93,15 @@ public final class AutoBuilderConfig {
 
     public static synchronized void toggleStartBuildAfterFetch() {
         startBuildAfterFetch = !startBuildAfterFetch;
+        save();
+    }
+
+    public static synchronized boolean topDownBuild() {
+        return topDownBuild;
+    }
+
+    public static synchronized void toggleTopDownBuild() {
+        topDownBuild = !topDownBuild;
         save();
     }
 

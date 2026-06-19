@@ -6,6 +6,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import java.util.HashSet;
 import java.lang.reflect.Method;
 import java.util.Set;
 
@@ -22,32 +23,73 @@ public final class CreativeMaterialSupplier {
             return 0;
         }
         int supplied = 0;
+        Set<Integer> reservedSlots = new HashSet<>();
         for (Item item : neededItems) {
             if (item == null || item == Items.AIR) {
                 continue;
             }
-            int inventorySlot = preferredSlot(player, item);
+            int inventorySlot = preferredSlot(player, item, neededItems, reservedSlots);
             if (inventorySlot < 0) {
                 continue;
             }
             ItemStack stack = item.getDefaultInstance().copy();
             stack.setCount(stack.getMaxStackSize());
             if (setCreativeSlot(minecraft, player, inventorySlot, stack)) {
+                reservedSlots.add(inventorySlot);
                 supplied++;
             }
         }
         return supplied;
     }
 
-    private static int preferredSlot(LocalPlayer player, Item item) {
+    private static int preferredSlot(LocalPlayer player, Item item, Set<Item> neededItems, Set<Integer> reservedSlots) {
         for (int i = 0; i < player.getInventory().getNonEquipmentItems().size(); i++) {
+            if (reservedSlots.contains(i)) {
+                continue;
+            }
             ItemStack stack = player.getInventory().getNonEquipmentItems().get(i);
             if (!stack.isEmpty() && stack.is(item) && stack.getCount() < stack.getMaxStackSize()) {
                 return i;
             }
         }
         for (int i = 0; i < player.getInventory().getNonEquipmentItems().size(); i++) {
-            if (player.getInventory().getNonEquipmentItems().get(i).isEmpty()) {
+            if (!reservedSlots.contains(i) && player.getInventory().getNonEquipmentItems().get(i).isEmpty()) {
+                return i;
+            }
+        }
+        int replaceable = replacementSlot(player, neededItems, reservedSlots, 9, player.getInventory().getNonEquipmentItems().size());
+        if (replaceable >= 0) {
+            return replaceable;
+        }
+        replaceable = replacementSlot(player, neededItems, reservedSlots, 0, 9);
+        if (replaceable >= 0) {
+            return replaceable;
+        }
+        replaceable = anySlot(player, reservedSlots, 9, player.getInventory().getNonEquipmentItems().size());
+        if (replaceable >= 0) {
+            return replaceable;
+        }
+        return anySlot(player, reservedSlots, 0, 9);
+    }
+
+    private static int replacementSlot(LocalPlayer player, Set<Item> neededItems, Set<Integer> reservedSlots, int start, int end) {
+        int limit = Math.min(end, player.getInventory().getNonEquipmentItems().size());
+        for (int i = start; i < limit; i++) {
+            if (reservedSlots.contains(i)) {
+                continue;
+            }
+            ItemStack stack = player.getInventory().getNonEquipmentItems().get(i);
+            if (stack.isEmpty() || !neededItems.contains(stack.getItem())) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static int anySlot(LocalPlayer player, Set<Integer> reservedSlots, int start, int end) {
+        int limit = Math.min(end, player.getInventory().getNonEquipmentItems().size());
+        for (int i = start; i < limit; i++) {
+            if (!reservedSlots.contains(i)) {
                 return i;
             }
         }

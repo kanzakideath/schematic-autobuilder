@@ -42,6 +42,10 @@ public final class MaterialRecipeHelper {
         return isLikelyFuel(stack) && neededNeedsSmelting(neededItems);
     }
 
+    public static boolean isFuelForNeeded(ItemStack stack, Set<Item> neededItems) {
+        return !stack.isEmpty() && !neededItems.isEmpty() && isLikelyFuel(stack) && neededNeedsSmelting(neededItems);
+    }
+
     public static RecipeDisplayEntry findCraftableCraftingRecipe(Minecraft minecraft, LocalPlayer player, Set<Item> neededItems) {
         if (minecraft == null || minecraft.level == null || player == null || neededItems.isEmpty()) {
             return null;

@@ -23,10 +23,18 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public final class MaterialChestProcess {
+    private static final int MAX_STACKS_PER_FETCH = 6;
+    private static final int MIN_EMPTY_SLOTS_AFTER_FETCH = 8;
+    private static final int HARD_MIN_EMPTY_SLOTS = 2;
+    private static final int EXACT_ITEM_STACK_LIMIT = 4;
+    private static final int INGREDIENT_STACK_LIMIT = 2;
+    private static final int FUEL_STACK_LIMIT = 1;
 
     public interface FetchCallback {
         void finished(FetchResult result);
@@ -80,6 +88,7 @@ public final class MaterialChestProcess {
     private static int currentChestTaken;
     private static int totalTakenStacks;
     private static Set<Item> neededItems = Set.of();
+    private static final Map<Item, Integer> takenItemStacks = new HashMap<>();
     private static String status = "Idle";
     private static boolean registeringChests;
 
@@ -159,6 +168,7 @@ public final class MaterialChestProcess {
         targets = chests;
         callback = fetchCallback;
         neededItems = BaritoneBridge.currentNeededBuildItems();
+        takenItemStacks.clear();
         targetIndex = 0;
         totalTakenStacks = 0;
         selectTarget();
@@ -183,6 +193,7 @@ public final class MaterialChestProcess {
         currentChestTaken = 0;
         totalTakenStacks = 0;
         neededItems = Set.of();
+        takenItemStacks.clear();
         status = reason == null ? "Idle" : reason;
         if (previousCallback != null && "Paused".equals(reason)) {
             previousCallback.finished(new FetchResult(false, 0, false, status));
@@ -259,31 +270,51 @@ public final class MaterialChestProcess {
             clickCooldown--;
             return;
         }
-        if (inventoryAlmostFull(player)) {
+        if (shouldStopFetching(player)) {
             player.closeContainer();
-            boolean took = totalTakenStacks > 0;
+            boolean took = totalTakenStacks > 0 || inventoryHasUsefulMaterial(player);
             finish(
-                    "Fetched " + totalTakenStacks + " stack(s); inventory is almost full",
+                    totalTakenStacks > 0
+                            ? "Fetched " + totalTakenStacks + " stack(s); returning to build"
+                            : "\u624b\u6301\u3061\u7d20\u6750\u3067\u5efa\u7bc9\u306b\u623b\u308a\u307e\u3059",
                     took ? ChatFormatting.GREEN : ChatFormatting.YELLOW,
                     took
             );
             return;
         }
-        int chestSlots = Math.max(0, menu.slots.size() - 36);
-        for (int i = 0; i < chestSlots; i++) {
-            Slot slot = menu.getSlot(i);
-            ItemStack stack = slot.getItem();
-            if (!stack.isEmpty() && isBuildMaterial(stack)) {
-                minecraft.gameMode.handleContainerInput(menu.containerId, i, 0, ContainerInput.QUICK_MOVE, player);
-                clickCooldown = 3;
-                currentChestTaken++;
-                totalTakenStacks++;
-                status = "Taking build materials: " + totalTakenStacks + " stack(s)";
-                return;
-            }
+        int slotIndex = bestMaterialSlot(menu);
+        if (slotIndex >= 0) {
+            ItemStack stack = menu.getSlot(slotIndex).getItem();
+            Item item = stack.getItem();
+            minecraft.gameMode.handleContainerInput(menu.containerId, slotIndex, 0, ContainerInput.QUICK_MOVE, player);
+            takenItemStacks.merge(item, 1, Integer::sum);
+            clickCooldown = 3;
+            currentChestTaken++;
+            totalTakenStacks++;
+            status = "Taking build materials: " + totalTakenStacks + "/" + MAX_STACKS_PER_FETCH + " stack(s)";
+            return;
         }
         player.closeContainer();
         advanceAfterChest();
+    }
+
+    private static int bestMaterialSlot(ChestMenu menu) {
+        int chestSlots = Math.max(0, menu.slots.size() - 36);
+        int usefulSlot = -1;
+        for (int i = 0; i < chestSlots; i++) {
+            Slot slot = menu.getSlot(i);
+            ItemStack stack = slot.getItem();
+            if (stack.isEmpty() || !isBuildMaterial(stack) || takenLimitReached(stack)) {
+                continue;
+            }
+            if (!neededItems.isEmpty() && neededItems.contains(stack.getItem())) {
+                return i;
+            }
+            if (usefulSlot < 0) {
+                usefulSlot = i;
+            }
+        }
+        return usefulSlot;
     }
 
     private static void advanceAfterChest() {
@@ -340,6 +371,7 @@ public final class MaterialChestProcess {
         currentChestTaken = 0;
         totalTakenStacks = 0;
         neededItems = Set.of();
+        takenItemStacks.clear();
         status = reason;
         AutoBuildController.message(reason, color);
         if (done != null) {
@@ -368,14 +400,55 @@ public final class MaterialChestProcess {
                 : "\u8cc7\u6750\u304c\u8db3\u308a\u307e\u305b\u3093: \u767b\u9332\u30c1\u30a7\u30b9\u30c8\u306b\u8a2d\u8a08\u56f3\u3067\u5fc5\u8981\u306a\u7d20\u6750\u304c\u3042\u308a\u307e\u305b\u3093";
     }
 
+    private static boolean shouldStopFetching(LocalPlayer player) {
+        int empty = emptySlots(player);
+        if (totalTakenStacks >= MAX_STACKS_PER_FETCH) {
+            return true;
+        }
+        if (totalTakenStacks > 0 && empty <= MIN_EMPTY_SLOTS_AFTER_FETCH) {
+            return true;
+        }
+        return empty <= HARD_MIN_EMPTY_SLOTS;
+    }
+
+    private static boolean takenLimitReached(ItemStack stack) {
+        return takenItemStacks.getOrDefault(stack.getItem(), 0) >= stackLimit(stack);
+    }
+
+    private static int stackLimit(ItemStack stack) {
+        if (neededItems.isEmpty()) {
+            return INGREDIENT_STACK_LIMIT;
+        }
+        if (neededItems.contains(stack.getItem())) {
+            return EXACT_ITEM_STACK_LIMIT;
+        }
+        if (MaterialRecipeHelper.isFuelForNeeded(stack, neededItems)) {
+            return FUEL_STACK_LIMIT;
+        }
+        return INGREDIENT_STACK_LIMIT;
+    }
+
+    private static boolean inventoryHasUsefulMaterial(LocalPlayer player) {
+        for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
+            if (!stack.isEmpty() && isBuildMaterial(stack)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean inventoryAlmostFull(LocalPlayer player) {
+        return emptySlots(player) <= HARD_MIN_EMPTY_SLOTS;
+    }
+
+    private static int emptySlots(LocalPlayer player) {
         int empty = 0;
         for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
             if (stack.isEmpty()) {
                 empty++;
             }
         }
-        return empty <= 2;
+        return empty;
     }
 
     private static List<BlockPos> sortedMaterialChests() {

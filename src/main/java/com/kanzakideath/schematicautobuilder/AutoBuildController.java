@@ -12,6 +12,10 @@ public final class AutoBuildController {
 
     private static final String MATERIAL_SHORTAGE = "\u8cc7\u6750\u304c\u8db3\u308a\u307e\u305b\u3093";
     private static final String MATERIAL_SHORTAGE_HINT = "\u767b\u9332\u30c1\u30a7\u30b9\u30c8\u306b\u8cc7\u6750\u3092\u8ffd\u52a0\u3057\u3066\u304b\u3089\u3001\u4e00\u6642\u505c\u6b62/\u518d\u958b\u307e\u305f\u306f\u958b\u59cb\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
+    private static final int INITIAL_REFETCH_GUARD_TICKS = 40;
+    private static final int RESUME_REFETCH_GUARD_TICKS = 40;
+    private static final int CREATIVE_REFETCH_GUARD_TICKS = 10;
+    private static final int WAITING_RETRY_TICKS = 60;
 
     private enum Mode {
         IDLE,
@@ -29,6 +33,7 @@ public final class AutoBuildController {
     private static int builderPausedTicks;
     private static int inactiveTicks;
     private static int refetchGuardTicks;
+    private static int creativeSupplyTicks;
     private static boolean materialShortageNotified;
     private static String status = "Idle";
     private static Set<Item> lastNeededItems = Set.of();
@@ -47,7 +52,14 @@ public final class AutoBuildController {
         if (refetchGuardTicks > 0) {
             refetchGuardTicks--;
         }
-        if (mode == Mode.PAUSED || mode == Mode.IDLE || mode == Mode.COMPLETE || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING || mode == Mode.WAITING_FOR_MATERIALS) {
+        if (creativeSupplyTicks > 0) {
+            creativeSupplyTicks--;
+        }
+        if (mode == Mode.WAITING_FOR_MATERIALS) {
+            retryWaitingForMaterials();
+            return;
+        }
+        if (mode == Mode.PAUSED || mode == Mode.IDLE || mode == Mode.COMPLETE || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING) {
             return;
         }
 
@@ -73,7 +85,8 @@ public final class AutoBuildController {
         }
         builderPausedTicks = 0;
         inactiveTicks = 0;
-        refetchGuardTicks = 80;
+        refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
+        creativeSupplyTicks = 0;
         materialShortageNotified = false;
         mode = Mode.BUILDING;
         status = "Building from placed schematic";
@@ -129,7 +142,12 @@ public final class AutoBuildController {
             inactiveTicks = 0;
             status = MATERIAL_SHORTAGE;
             rememberNeededItems();
-            if (builderPausedTicks >= 20 && refetchGuardTicks == 0 && supplyCreativeAndResume()) {
+            if (builderPausedTicks >= 1 && (refetchGuardTicks == 0 || isCreativeMode()) && supplyCreativeAndResume()) {
+                return;
+            }
+            if (builderPausedTicks >= 20 && isCreativeMode() && refetchGuardTicks == 0 && AutoBuilderConfig.startBuildAfterFetch()) {
+                refetchGuardTicks = CREATIVE_REFETCH_GUARD_TICKS;
+                resumeBuildAfterMaterialChange("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u3067\u5efa\u7bc9\u3092\u518d\u8a66\u884c\u3057\u307e\u3059");
                 return;
             }
             if (builderPausedTicks >= 20 && refetchGuardTicks == 0 && tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4e0d\u8db3\u5206\u3092\u4f5c\u6210\u4e2d")) {
@@ -147,6 +165,7 @@ public final class AutoBuildController {
 
         builderPausedTicks = 0;
         materialShortageNotified = false;
+        supplyCreativeWhileBuilding();
         if (BaritoneBridge.isBuilderActive()) {
             inactiveTicks = 0;
             status = "Building";
@@ -166,6 +185,7 @@ public final class AutoBuildController {
         BaritoneBridge.cancelPathing();
         if (!MaterialChestProcess.start(AutoBuildController::onBuildFetchFinished)) {
             mode = Mode.WAITING_FOR_MATERIALS;
+            refetchGuardTicks = WAITING_RETRY_TICKS;
             status = MaterialChestProcess.status().isBlank() ? MATERIAL_SHORTAGE : MaterialChestProcess.status();
             message(status, ChatFormatting.RED);
             return;
@@ -183,12 +203,8 @@ public final class AutoBuildController {
             if (tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4f5c\u308c\u308b\u5206\u3092\u4f5c\u6210\u4e2d")) {
                 return;
             }
-            if (result.inventoryFull() && AutoBuilderConfig.startBuildAfterFetch()) {
-                refetchGuardTicks = 100;
-                resumeBuildAfterMaterialChange("\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304c\u6e80\u676f\u306e\u305f\u3081\u3001\u73fe\u5728\u306e\u624b\u6301\u3061\u7d20\u6750\u3067\u5efa\u7bc9\u3092\u518d\u958b\u3057\u307e\u3059");
-                return;
-            }
             mode = Mode.WAITING_FOR_MATERIALS;
+            refetchGuardTicks = WAITING_RETRY_TICKS;
             status = result.message().isBlank() ? MATERIAL_SHORTAGE : result.message();
             message(status + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
             return;
@@ -202,7 +218,7 @@ public final class AutoBuildController {
             message(status, ChatFormatting.YELLOW);
             return;
         }
-        refetchGuardTicks = 100;
+        refetchGuardTicks = RESUME_REFETCH_GUARD_TICKS;
         resumeBuildAfterFetch(result.stacksTaken());
     }
 
@@ -224,7 +240,7 @@ public final class AutoBuildController {
             message(status, result.crafted() ? ChatFormatting.GREEN : ChatFormatting.YELLOW);
             return;
         }
-        refetchGuardTicks = 100;
+        refetchGuardTicks = RESUME_REFETCH_GUARD_TICKS;
         resumeBuildAfterFetch(result.craftedCount());
     }
 
@@ -244,7 +260,7 @@ public final class AutoBuildController {
             message(status, result.smelted() ? ChatFormatting.GREEN : ChatFormatting.YELLOW);
             return;
         }
-        refetchGuardTicks = 100;
+        refetchGuardTicks = RESUME_REFETCH_GUARD_TICKS;
         resumeBuildAfterFetch(result.outputTaken());
     }
 
@@ -268,6 +284,33 @@ public final class AutoBuildController {
         message(status, ChatFormatting.GREEN);
     }
 
+    private static void retryWaitingForMaterials() {
+        if (refetchGuardTicks > 0) {
+            return;
+        }
+        rememberNeededItems();
+        if (supplyCreativeAndResume()) {
+            return;
+        }
+        if (isCreativeMode() && AutoBuilderConfig.startBuildAfterFetch()) {
+            refetchGuardTicks = CREATIVE_REFETCH_GUARD_TICKS;
+            resumeBuildAfterMaterialChange("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u306e\u305f\u3081\u5efa\u7bc9\u3092\u518d\u8a66\u884c\u3057\u307e\u3059");
+            return;
+        }
+        if (tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4e0d\u8db3\u5206\u3092\u4f5c\u6210\u4e2d")) {
+            return;
+        }
+        if (AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources()) {
+            startMaterialFetchForBuild(MATERIAL_SHORTAGE + ": checking registered material chests");
+            return;
+        }
+        if (!materialShortageNotified) {
+            materialShortageNotified = true;
+            message(MATERIAL_SHORTAGE + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
+        }
+        refetchGuardTicks = WAITING_RETRY_TICKS;
+    }
+
     private static Set<Item> rememberNeededItems() {
         Set<Item> current = BaritoneBridge.currentNeededBuildItems();
         if (!current.isEmpty()) {
@@ -282,9 +325,23 @@ public final class AutoBuildController {
         if (supplied <= 0) {
             return false;
         }
-        refetchGuardTicks = 60;
+        refetchGuardTicks = CREATIVE_REFETCH_GUARD_TICKS;
         resumeBuildAfterMaterialChange("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304b\u3089\u4e0d\u8db3\u7d20\u6750\u3092\u88dc\u5145\u3057\u3066\u518d\u958b\u3057\u307e\u3057\u305f");
         return true;
+    }
+
+    private static void supplyCreativeWhileBuilding() {
+        if (!isCreativeMode() || creativeSupplyTicks > 0) {
+            return;
+        }
+        creativeSupplyTicks = 20;
+        Set<Item> needed = rememberNeededItems();
+        CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), needed);
+    }
+
+    private static boolean isCreativeMode() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.player != null && minecraft.player.isCreative();
     }
 
     private static boolean tryMaterialCreationForBuild(String progressStatus) {

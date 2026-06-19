@@ -84,6 +84,12 @@ public final class AutoBuilderScreen extends Screen {
             AutoBuilderConfig.toggleAutoCraftMaterials();
             refresh();
         }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, full, topDownLabel(), () -> {
+            AutoBuilderConfig.toggleTopDownBuild();
+            refresh();
+        }));
         by += row + gap + 20;
 
         addRenderableWidget(button(x + 24, by, half, "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u767b\u9332\u3092\u5168\u524a\u9664", () -> {
@@ -125,15 +131,15 @@ public final class AutoBuilderScreen extends Screen {
         drawChip(graphics, x + 24, y + 72, "\u81ea\u52d5\u88dc\u5145", AutoBuilderConfig.autoFetchMaterials());
         drawChip(graphics, x + 182, y + 72, "\u88dc\u5145\u5f8c\u518d\u958b", AutoBuilderConfig.startBuildAfterFetch());
         drawChip(graphics, x + 340, y + 72, "\u81ea\u52d5\u4f5c\u6210", AutoBuilderConfig.autoCraftMaterials());
-        drawChip(graphics, x + 498, y + 72, "\u7d20\u6750\u7bb1 " + AutoBuilderConfig.materialChestCount(), AutoBuilderConfig.materialChestCount() > 0);
-        graphics.text(this.font, "\u30e2\u30fc\u30c9: " + modeNameJa(), x + 24, y + 94, modeColor());
+        drawChip(graphics, x + 498, y + 72, "\u4e0a\u304b\u3089\u5efa\u7bc9", AutoBuilderConfig.topDownBuild());
+        graphics.text(this.font, "\u30e2\u30fc\u30c9: " + modeNameJa() + " / \u7d20\u6750\u7bb1: " + AutoBuilderConfig.materialChestCount(), x + 24, y + 94, modeColor());
         graphics.text(this.font, "Baritone: " + statusJa(BaritoneBridge.status()), x + 182, y + 94, BaritoneBridge.isAvailable() ? GREEN : RED);
 
         int sx = x + 24;
         int sy = y + 108;
         section(graphics, sx, sy, panelWidth - 48, 84, "01  \u30e2\u30fc\u30c9", "\u914d\u7f6e\u6e08\u307f\u8a2d\u8a08\u56f3\u306e\u81ea\u52d5\u5efa\u7bc9\u3001\u307e\u305f\u306fBaritone\u6574\u5730\u30e2\u30fc\u30c9\u3092\u958b\u59cb\u3057\u307e\u3059");
-        section(graphics, sx, sy + 96, panelWidth - 48, 104, "02  \u7d20\u6750\u88dc\u5145", "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3068\u6574\u5730\u4fdd\u7ba1\u30c1\u30a7\u30b9\u30c8\u304b\u3089\u88dc\u5145\u3057\u3001\u4e0d\u8db3\u5206\u306f\u4f5c\u6210/\u7cbe\u932c\u3057\u307e\u3059");
-        section(graphics, sx, sy + 212, panelWidth - 48, 74, "03  \u7ba1\u7406", "\u7d20\u6750\u767b\u9332\u306e\u524a\u9664\u3001\u66f4\u65b0\u78ba\u8a8d\u3001\u753b\u9762\u3092\u9589\u3058\u308b\u64cd\u4f5c\u3067\u3059");
+        section(graphics, sx, sy + 96, panelWidth - 48, 134, "02  \u7d20\u6750\u88dc\u5145", "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3068\u6574\u5730\u4fdd\u7ba1\u30c1\u30a7\u30b9\u30c8\u304b\u3089\u5c11\u91cf\u305a\u3064\u88dc\u5145\u3057\u3001\u4e0d\u8db3\u5206\u306f\u4f5c\u6210/\u7cbe\u932c\u3057\u307e\u3059");
+        section(graphics, sx, sy + 242, panelWidth - 48, 74, "03  \u7ba1\u7406", "\u4e0a\u304b\u3089\u5efa\u7bc9\u306e\u5207\u308a\u66ff\u3048\u3001\u7d20\u6750\u767b\u9332\u306e\u524a\u9664\u3001\u66f4\u65b0\u78ba\u8a8d\u3067\u3059");
 
         graphics.text(this.font, "\u8a2d\u8a08\u56f3: " + statusJa(BaritoneBridge.openSchematicStatus()), x + 24, y + panelHeight - 58, DIM);
         graphics.text(this.font, "\u81ea\u52d5\u5efa\u7bc9: " + statusJa(AutoBuildController.status()), x + 24, y + panelHeight - 42, statusColor(AutoBuildController.status()));
@@ -182,6 +188,10 @@ public final class AutoBuilderScreen extends Screen {
 
     private static String autoCraftLabel() {
         return "\u4e0d\u8db3\u7d20\u6750\u3092\u81ea\u52d5\u4f5c\u6210: " + onOff(AutoBuilderConfig.autoCraftMaterials());
+    }
+
+    private static String topDownLabel() {
+        return "\u4e0a\u304b\u3089\u9806\u756a\u306b\u5efa\u7bc9: " + onOff(AutoBuilderConfig.topDownBuild());
     }
 
     private static String materialChestRegisterLabel() {
@@ -304,7 +314,7 @@ public final class AutoBuilderScreen extends Screen {
     }
 
     private static int panelHeight() {
-        return 430;
+        return 460;
     }
 
     private static void border(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int color) {

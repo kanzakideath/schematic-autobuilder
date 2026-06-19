@@ -10,9 +10,11 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public final class BaritoneBridge {
@@ -164,6 +166,18 @@ public final class BaritoneBridge {
         setBooleanSetting(settings, "allowInventory", true);
         setBooleanSetting(settings, "buildIgnoreExisting", false);
         setBooleanSetting(settings, "buildIgnoreDirection", false);
+        setBooleanSetting(settings, "buildOnlySelection", false);
+        setBooleanSetting(settings, "buildInLayers", AutoBuilderConfig.topDownBuild());
+        setBooleanSetting(settings, "layerOrder", AutoBuilderConfig.topDownBuild());
+        setBooleanSetting(settings, "skipFailedLayers", false);
+        setBooleanSetting(settings, "okIfWater", false);
+        setBooleanSetting(settings, "mapArtMode", false);
+        setIntegerSetting(settings, "startAtLayer", 0);
+        clearCollectionSetting(settings, "buildIgnoreBlocks");
+        clearCollectionSetting(settings, "buildSkipBlocks");
+        clearCollectionSetting(settings, "okIfAir");
+        clearMapSetting(settings, "buildValidSubstitutes");
+        clearMapSetting(settings, "buildSubstitutes");
     }
 
     public static Set<Item> currentNeededBuildItems() {
@@ -254,6 +268,42 @@ public final class BaritoneBridge {
             Field valueField = setting.getClass().getField("value");
             valueField.set(setting, value);
         } catch (ReflectiveOperationException | LinkageError ignored) {
+        }
+    }
+
+    private static void setIntegerSetting(Object settings, String fieldName, int value) {
+        try {
+            Field settingField = settings.getClass().getField(fieldName);
+            Object setting = settingField.get(settings);
+            Field valueField = setting.getClass().getField("value");
+            valueField.set(setting, value);
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+        }
+    }
+
+    private static void clearCollectionSetting(Object settings, String fieldName) {
+        try {
+            Field settingField = settings.getClass().getField(fieldName);
+            Object setting = settingField.get(settings);
+            Field valueField = setting.getClass().getField("value");
+            Object value = valueField.get(setting);
+            if (value instanceof Collection<?> collection) {
+                collection.clear();
+            }
+        } catch (ReflectiveOperationException | LinkageError | UnsupportedOperationException ignored) {
+        }
+    }
+
+    private static void clearMapSetting(Object settings, String fieldName) {
+        try {
+            Field settingField = settings.getClass().getField(fieldName);
+            Object setting = settingField.get(settings);
+            Field valueField = setting.getClass().getField("value");
+            Object value = valueField.get(setting);
+            if (value instanceof Map<?, ?> map) {
+                map.clear();
+            }
+        } catch (ReflectiveOperationException | LinkageError | UnsupportedOperationException ignored) {
         }
     }
 
