@@ -311,8 +311,8 @@ public final class MaterialChestProcess {
 
     private static String materialShortageMessage() {
         return neededItems.isEmpty()
-                ? "資材が足りません"
-                : "資材が足りません: 登録チェストに設計図で必要な素材がありません";
+                ? "\u8cc7\u6750\u304c\u8db3\u308a\u307e\u305b\u3093"
+                : "\u8cc7\u6750\u304c\u8db3\u308a\u307e\u305b\u3093: \u767b\u9332\u30c1\u30a7\u30b9\u30c8\u306b\u8a2d\u8a08\u56f3\u3067\u5fc5\u8981\u306a\u7d20\u6750\u304c\u3042\u308a\u307e\u305b\u3093";
     }
 
     private static boolean inventoryAlmostFull(LocalPlayer player) {

@@ -7,6 +7,9 @@ import net.minecraft.network.chat.Component;
 
 public final class AutoBuildController {
 
+    private static final String MATERIAL_SHORTAGE = "\u8cc7\u6750\u304c\u8db3\u308a\u307e\u305b\u3093";
+    private static final String MATERIAL_SHORTAGE_HINT = "\u767b\u9332\u30c1\u30a7\u30b9\u30c8\u306b\u8cc7\u6750\u3092\u8ffd\u52a0\u3057\u3066\u304b\u3089\u3001\u4e00\u6642\u505c\u6b62/\u518d\u958b\u307e\u305f\u306f\u958b\u59cb\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
+
     private enum Mode {
         IDLE,
         BUILDING,
@@ -21,6 +24,7 @@ public final class AutoBuildController {
     private static int builderPausedTicks;
     private static int inactiveTicks;
     private static int refetchGuardTicks;
+    private static boolean materialShortageNotified;
     private static String status = "Idle";
 
     private AutoBuildController() {}
@@ -62,6 +66,7 @@ public final class AutoBuildController {
         builderPausedTicks = 0;
         inactiveTicks = 0;
         refetchGuardTicks = 80;
+        materialShortageNotified = false;
         mode = Mode.BUILDING;
         status = "Building from placed schematic";
         message("Full auto build started", ChatFormatting.AQUA);
@@ -109,14 +114,19 @@ public final class AutoBuildController {
         if (BaritoneBridge.isBuilderPaused()) {
             builderPausedTicks++;
             inactiveTicks = 0;
-            status = "Builder paused by Baritone";
+            status = MATERIAL_SHORTAGE;
             if (builderPausedTicks >= 40 && AutoBuilderConfig.autoFetchMaterials() && AutoBuilderConfig.materialChestCount() > 0 && refetchGuardTicks == 0) {
-                startMaterialFetchForBuild("Builder paused; trying registered material chests");
+                materialShortageNotified = false;
+                startMaterialFetchForBuild(MATERIAL_SHORTAGE + ": checking registered material chests");
+            } else if (builderPausedTicks >= 40 && !materialShortageNotified) {
+                materialShortageNotified = true;
+                message(MATERIAL_SHORTAGE + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
             }
             return;
         }
 
         builderPausedTicks = 0;
+        materialShortageNotified = false;
         if (BaritoneBridge.isBuilderActive()) {
             inactiveTicks = 0;
             status = "Building";
@@ -136,8 +146,8 @@ public final class AutoBuildController {
         BaritoneBridge.cancelPathing();
         if (!MaterialChestProcess.start(AutoBuildController::onBuildFetchFinished)) {
             mode = Mode.WAITING_FOR_MATERIALS;
-            status = MaterialChestProcess.status();
-            message(status, ChatFormatting.YELLOW);
+            status = MaterialChestProcess.status().isBlank() ? MATERIAL_SHORTAGE : MaterialChestProcess.status();
+            message(status, ChatFormatting.RED);
             return;
         }
         mode = Mode.FETCHING;
@@ -151,8 +161,8 @@ public final class AutoBuildController {
         }
         if (!result.tookMaterials()) {
             mode = Mode.WAITING_FOR_MATERIALS;
-            status = result.message().isBlank() ? "資材が足りません" : result.message();
-            message(status + "。チェストに資材を追加してから、一時停止/再開または開始を押してください。", ChatFormatting.RED);
+            status = result.message().isBlank() ? MATERIAL_SHORTAGE : result.message();
+            message(status + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
             return;
         }
         if (!AutoBuilderConfig.startBuildAfterFetch()) {
@@ -175,6 +185,7 @@ public final class AutoBuildController {
 
     private static void resumeBuildAfterFetch(int stacksTaken) {
         BaritoneBridge.resumeBuilder();
+        materialShortageNotified = false;
         if (!BaritoneBridge.startPlacedSchematicBuild()) {
             mode = Mode.WAITING_FOR_MATERIALS;
             status = "Fetched " + stacksTaken + " stack(s), but no placed schematic was found";
@@ -223,6 +234,7 @@ public final class AutoBuildController {
                     return;
                 }
             }
+            materialShortageNotified = false;
             mode = Mode.BUILDING;
             status = "Resumed build";
             message(status, ChatFormatting.GREEN);

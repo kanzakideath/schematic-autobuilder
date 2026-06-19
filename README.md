@@ -2,9 +2,8 @@
 
 Minecraft 26.2 Fabric client mod for one-button schematic building.
 
-This is a companion mod. It does not replace Baritone; it controls the Baritone
-builder process and adds a small settings terminal for Litematica/Schematica
-build workflows.
+This companion mod controls Baritone's builder process and adds a grouped
+settings terminal for Litematica/Schematica build workflows.
 
 ## Requirements
 
@@ -15,32 +14,20 @@ build workflows.
 
 ## Controls
 
-- Press `J` to open the Schematic Auto Builder menu. The key is handled globally, so it can open from the title screen, menus, and in-game.
-- Press `K` in game to pause or resume automation.
-- Both keybinds are configurable in Minecraft's Controls menu.
+- No default `J` key is used.
+- Assign `Open Auto Builder Menu` and `Pause/Resume Auto Builder` in Minecraft's Controls menu.
+- With the bundled Baritone build, open Baritone settings and choose `全自動建築モードを開く`.
 
 ## Features
 
-- One-button start for placed Litematica/Schematica schematics.
+- Auto Build mode: starts building from the placed Litematica/Schematica schematic.
+- Clear Area mode: opens the Baritone terrain-clearing menu.
 - Register material chests by looking at a chest and pressing the menu button.
-- Automatically switches to registered material chests when Baritone pauses from missing materials.
+- Automatically checks registered material chests when Baritone pauses from missing materials.
 - Shows `資材が足りません` when registered chests do not contain usable schematic materials.
-- Returns to the placed schematic and restarts the builder after a successful refill.
 - Visits each registered material chest once per refill pass, so empty chests do not open/close in a loop.
-- Uses Baritone's exact schematic builder settings: direction-sensitive blocks are not ignored, and incorrect existing blocks are repaired by Baritone.
-- Optional auto-resume after material fetching.
+- Uses Baritone's exact schematic builder settings for direction-sensitive placement and block repair.
 - GitHub manifest updater from the in-game menu.
-
-## Current Material Fetching Behavior
-
-When Baritone exposes the active build's incorrect positions, the refill pass
-targets item types that match the schematic's missing desired block states. If
-that snapshot is unavailable, it falls back to likely building materials such as
-block items, sticks, iron ingots, diamonds, cobblestone, redstone, and string.
-
-It is intentionally separate from the Baritone clearing project. The existing
-Baritone build engine still handles placement, direction-sensitive blocks, and
-pathing.
 
 ## Build
 
@@ -51,5 +38,5 @@ pathing.
 Output:
 
 ```text
-build/libs/schematic-autobuilder-0.2.6+26.2.jar
+build/libs/schematic-autobuilder-0.2.7+26.2.jar
 ```

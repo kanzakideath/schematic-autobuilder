@@ -18,6 +18,7 @@ public final class AutoBuilderConfig {
     private static final List<BlockPos> MATERIAL_CHESTS = new ArrayList<>();
     private static boolean autoFetchMaterials = true;
     private static boolean startBuildAfterFetch = true;
+    private static int keyMigrationVersion;
 
     private AutoBuilderConfig() {}
 
@@ -33,6 +34,7 @@ public final class AutoBuilderConfig {
         }
         autoFetchMaterials = Boolean.parseBoolean(properties.getProperty("autoFetchMaterials", "true"));
         startBuildAfterFetch = Boolean.parseBoolean(properties.getProperty("startBuildAfterFetch", "true"));
+        keyMigrationVersion = parseInt(properties.getProperty("keyMigrationVersion", "0"));
         for (String encoded : properties.getProperty("materialChests", "").split(";")) {
             BlockPos pos = decodePos(encoded);
             if (pos != null && !MATERIAL_CHESTS.contains(pos)) {
@@ -45,6 +47,7 @@ public final class AutoBuilderConfig {
         Properties properties = new Properties();
         properties.setProperty("autoFetchMaterials", Boolean.toString(autoFetchMaterials));
         properties.setProperty("startBuildAfterFetch", Boolean.toString(startBuildAfterFetch));
+        properties.setProperty("keyMigrationVersion", Integer.toString(keyMigrationVersion));
         List<String> encoded = new ArrayList<>();
         for (BlockPos pos : MATERIAL_CHESTS) {
             encoded.add(encodePos(pos));
@@ -102,6 +105,15 @@ public final class AutoBuilderConfig {
         return new ArrayList<>(MATERIAL_CHESTS);
     }
 
+    public static synchronized int keyMigrationVersion() {
+        return keyMigrationVersion;
+    }
+
+    public static synchronized void markKeyMigrationVersion(int version) {
+        keyMigrationVersion = Math.max(keyMigrationVersion, version);
+        save();
+    }
+
     private static Path configPath() {
         return Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("schematic-autobuilder.properties");
     }
@@ -122,6 +134,14 @@ public final class AutoBuilderConfig {
             return new BlockPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
         } catch (NumberFormatException ignored) {
             return null;
+        }
+    }
+
+    private static int parseInt(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return 0;
         }
     }
 }

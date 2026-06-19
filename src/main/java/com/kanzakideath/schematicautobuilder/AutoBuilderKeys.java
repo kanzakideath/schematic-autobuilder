@@ -8,17 +8,19 @@ import org.lwjgl.glfw.GLFW;
 
 public final class AutoBuilderKeys {
 
+    private static final int KEY_MIGRATION_UNBOUND_DEFAULTS = 1;
+
     private static final KeyMapping OPEN_MENU = new KeyMapping(
             "key.schematicautobuilder.open_menu",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_J,
+            InputConstants.UNKNOWN.getType(),
+            InputConstants.UNKNOWN.getValue(),
             KeyMapping.Category.MISC
     );
 
     private static final KeyMapping PAUSE_AUTOMATION = new KeyMapping(
             "key.schematicautobuilder.pause_automation",
-            InputConstants.Type.KEYSYM,
-            GLFW.GLFW_KEY_K,
+            InputConstants.UNKNOWN.getType(),
+            InputConstants.UNKNOWN.getValue(),
             KeyMapping.Category.MISC
     );
 
@@ -34,6 +36,7 @@ public final class AutoBuilderKeys {
     }
 
     public static void onClientTick(Minecraft minecraft) {
+        migrateOldDefaultKeys(minecraft);
         while (OPEN_MENU.consumeClick()) {
             openMenu(minecraft);
         }
@@ -59,6 +62,30 @@ public final class AutoBuilderKeys {
             return true;
         }
         return false;
+    }
+
+    private static void migrateOldDefaultKeys(Minecraft minecraft) {
+        if (minecraft == null || AutoBuilderConfig.keyMigrationVersion() >= KEY_MIGRATION_UNBOUND_DEFAULTS) {
+            return;
+        }
+        boolean changed = false;
+        if (isBoundTo(OPEN_MENU, GLFW.GLFW_KEY_J)) {
+            OPEN_MENU.setKey(InputConstants.UNKNOWN);
+            changed = true;
+        }
+        if (isBoundTo(PAUSE_AUTOMATION, GLFW.GLFW_KEY_K)) {
+            PAUSE_AUTOMATION.setKey(InputConstants.UNKNOWN);
+            changed = true;
+        }
+        if (changed) {
+            KeyMapping.resetMapping();
+            minecraft.options.save();
+        }
+        AutoBuilderConfig.markKeyMigrationVersion(KEY_MIGRATION_UNBOUND_DEFAULTS);
+    }
+
+    private static boolean isBoundTo(KeyMapping mapping, int key) {
+        return mapping.matches(InputConstants.Type.KEYSYM.getOrCreate(key));
     }
 
     private static void openMenu(Minecraft minecraft) {
