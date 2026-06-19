@@ -14,6 +14,8 @@ public final class AutoBuildController {
         IDLE,
         BUILDING,
         FETCHING,
+        CRAFTING,
+        SMELTING,
         WAITING_FOR_MATERIALS,
         PAUSED,
         COMPLETE
@@ -35,11 +37,13 @@ public final class AutoBuildController {
         }
 
         MaterialChestProcess.tick(minecraft);
+        MaterialCraftProcess.tick(minecraft);
+        MaterialSmeltProcess.tick(minecraft);
 
         if (refetchGuardTicks > 0) {
             refetchGuardTicks--;
         }
-        if (mode == Mode.PAUSED || mode == Mode.IDLE || mode == Mode.COMPLETE || mode == Mode.FETCHING || mode == Mode.WAITING_FOR_MATERIALS) {
+        if (mode == Mode.PAUSED || mode == Mode.IDLE || mode == Mode.COMPLETE || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING || mode == Mode.WAITING_FOR_MATERIALS) {
             return;
         }
 
@@ -99,7 +103,7 @@ public final class AutoBuildController {
     }
 
     public static boolean isRunning() {
-        return mode == Mode.BUILDING || mode == Mode.FETCHING || mode == Mode.WAITING_FOR_MATERIALS || mode == Mode.PAUSED;
+        return mode == Mode.BUILDING || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING || mode == Mode.WAITING_FOR_MATERIALS || mode == Mode.PAUSED;
     }
 
     public static String status() {
@@ -115,7 +119,7 @@ public final class AutoBuildController {
             builderPausedTicks++;
             inactiveTicks = 0;
             status = MATERIAL_SHORTAGE;
-            if (builderPausedTicks >= 40 && AutoBuilderConfig.autoFetchMaterials() && AutoBuilderConfig.materialChestCount() > 0 && refetchGuardTicks == 0) {
+            if (builderPausedTicks >= 40 && AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources() && refetchGuardTicks == 0) {
                 materialShortageNotified = false;
                 startMaterialFetchForBuild(MATERIAL_SHORTAGE + ": checking registered material chests");
             } else if (builderPausedTicks >= 40 && !materialShortageNotified) {
@@ -165,6 +169,18 @@ public final class AutoBuildController {
             message(status + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
             return;
         }
+        if (AutoBuilderConfig.autoCraftMaterials() && MaterialSmeltProcess.start(AutoBuildController::onBuildSmeltFinished)) {
+            mode = Mode.SMELTING;
+            status = "Smelting fetched materials";
+            message(status, ChatFormatting.AQUA);
+            return;
+        }
+        if (AutoBuilderConfig.autoCraftMaterials() && MaterialCraftProcess.start(AutoBuildController::onBuildCraftFinished)) {
+            mode = Mode.CRAFTING;
+            status = "Crafting fetched materials";
+            message(status, ChatFormatting.AQUA);
+            return;
+        }
         if (!AutoBuilderConfig.startBuildAfterFetch()) {
             mode = Mode.IDLE;
             status = "Fetched materials; auto resume is off";
@@ -181,6 +197,40 @@ public final class AutoBuildController {
         }
         mode = Mode.IDLE;
         status = result.message();
+    }
+
+    private static void onBuildCraftFinished(MaterialCraftProcess.CraftResult result) {
+        if (mode == Mode.PAUSED) {
+            return;
+        }
+        if (!AutoBuilderConfig.startBuildAfterFetch()) {
+            mode = Mode.IDLE;
+            status = result.message();
+            message(status, result.crafted() ? ChatFormatting.GREEN : ChatFormatting.YELLOW);
+            return;
+        }
+        refetchGuardTicks = 100;
+        resumeBuildAfterFetch(result.craftedCount());
+    }
+
+    private static void onBuildSmeltFinished(MaterialSmeltProcess.SmeltResult result) {
+        if (mode == Mode.PAUSED) {
+            return;
+        }
+        if (AutoBuilderConfig.autoCraftMaterials() && MaterialCraftProcess.start(AutoBuildController::onBuildCraftFinished)) {
+            mode = Mode.CRAFTING;
+            status = "Crafting smelted materials";
+            message(status, ChatFormatting.AQUA);
+            return;
+        }
+        if (!AutoBuilderConfig.startBuildAfterFetch()) {
+            mode = Mode.IDLE;
+            status = result.message();
+            message(status, result.smelted() ? ChatFormatting.GREEN : ChatFormatting.YELLOW);
+            return;
+        }
+        refetchGuardTicks = 100;
+        resumeBuildAfterFetch(result.outputTaken());
     }
 
     private static void resumeBuildAfterFetch(int stacksTaken) {
@@ -207,6 +257,8 @@ public final class AutoBuildController {
         mode = Mode.PAUSED;
         status = "Paused";
         MaterialChestProcess.stop("Paused");
+        MaterialCraftProcess.stop("Paused");
+        MaterialSmeltProcess.stop("Paused");
         closeContainerIfNeeded();
         BaritoneBridge.pauseBuilder();
         BaritoneBridge.cancelPathing();

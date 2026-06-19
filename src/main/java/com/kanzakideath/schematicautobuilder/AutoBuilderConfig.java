@@ -17,6 +17,7 @@ public final class AutoBuilderConfig {
 
     private static final List<BlockPos> MATERIAL_CHESTS = new ArrayList<>();
     private static boolean autoFetchMaterials = true;
+    private static boolean autoCraftMaterials = true;
     private static boolean startBuildAfterFetch = true;
     private static int keyMigrationVersion;
 
@@ -33,6 +34,7 @@ public final class AutoBuilderConfig {
             }
         }
         autoFetchMaterials = Boolean.parseBoolean(properties.getProperty("autoFetchMaterials", "true"));
+        autoCraftMaterials = Boolean.parseBoolean(properties.getProperty("autoCraftMaterials", "true"));
         startBuildAfterFetch = Boolean.parseBoolean(properties.getProperty("startBuildAfterFetch", "true"));
         keyMigrationVersion = parseInt(properties.getProperty("keyMigrationVersion", "0"));
         for (String encoded : properties.getProperty("materialChests", "").split(";")) {
@@ -46,6 +48,7 @@ public final class AutoBuilderConfig {
     public static synchronized void save() {
         Properties properties = new Properties();
         properties.setProperty("autoFetchMaterials", Boolean.toString(autoFetchMaterials));
+        properties.setProperty("autoCraftMaterials", Boolean.toString(autoCraftMaterials));
         properties.setProperty("startBuildAfterFetch", Boolean.toString(startBuildAfterFetch));
         properties.setProperty("keyMigrationVersion", Integer.toString(keyMigrationVersion));
         List<String> encoded = new ArrayList<>();
@@ -69,6 +72,15 @@ public final class AutoBuilderConfig {
 
     public static synchronized void toggleAutoFetchMaterials() {
         autoFetchMaterials = !autoFetchMaterials;
+        save();
+    }
+
+    public static synchronized boolean autoCraftMaterials() {
+        return autoCraftMaterials;
+    }
+
+    public static synchronized void toggleAutoCraftMaterials() {
+        autoCraftMaterials = !autoCraftMaterials;
         save();
     }
 

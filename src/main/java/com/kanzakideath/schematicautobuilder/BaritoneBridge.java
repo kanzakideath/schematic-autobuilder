@@ -9,6 +9,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -122,6 +123,10 @@ public final class BaritoneBridge {
     }
 
     public static boolean pathToChest(BlockPos pos) {
+        return pathToBlock(pos);
+    }
+
+    public static boolean pathToBlock(BlockPos pos) {
         Object baritone = primaryBaritone();
         if (baritone == null || pos == null) {
             return false;
@@ -137,6 +142,16 @@ public final class BaritoneBridge {
         } catch (ReflectiveOperationException ignored) {
             return false;
         }
+    }
+
+    public static List<BlockPos> clearAreaStorageChests() {
+        Object settings = settings();
+        if (settings == null) {
+            return List.of();
+        }
+        List<BlockPos> result = new ArrayList<>();
+        addSettingsChestPositions(settings, "clearAreaStorageChests", result);
+        return result;
     }
 
     public static void configureForExactSchematicBuild() {
@@ -239,6 +254,37 @@ public final class BaritoneBridge {
             Field valueField = setting.getClass().getField("value");
             valueField.set(setting, value);
         } catch (ReflectiveOperationException | LinkageError ignored) {
+        }
+    }
+
+    private static void addSettingsChestPositions(Object settings, String fieldName, List<BlockPos> result) {
+        try {
+            Field settingField = settings.getClass().getField(fieldName);
+            Object setting = settingField.get(settings);
+            Field valueField = setting.getClass().getField("value");
+            Object value = valueField.get(setting);
+            if (!(value instanceof Iterable<?> encodedPositions)) {
+                return;
+            }
+            for (Object encoded : encodedPositions) {
+                BlockPos pos = decodeSettingsPos(encoded == null ? "" : encoded.toString());
+                if (pos != null && !result.contains(pos)) {
+                    result.add(pos);
+                }
+            }
+        } catch (ReflectiveOperationException | LinkageError ignored) {
+        }
+    }
+
+    private static BlockPos decodeSettingsPos(String value) {
+        String[] parts = value.trim().split(";");
+        if (parts.length != 3) {
+            return null;
+        }
+        try {
+            return new BlockPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2]));
+        } catch (NumberFormatException ignored) {
+            return null;
         }
     }
 

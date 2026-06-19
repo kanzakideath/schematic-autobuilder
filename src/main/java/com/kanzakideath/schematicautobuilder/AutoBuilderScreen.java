@@ -78,6 +78,12 @@ public final class AutoBuilderScreen extends Screen {
             AutoBuilderConfig.toggleStartBuildAfterFetch();
             refresh();
         }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, full, autoCraftLabel(), () -> {
+            AutoBuilderConfig.toggleAutoCraftMaterials();
+            refresh();
+        }));
         by += row + gap + 20;
 
         addRenderableWidget(button(x + 24, by, half, "CLEAR MATERIAL CHESTS", () -> {
@@ -118,15 +124,16 @@ public final class AutoBuilderScreen extends Screen {
 
         drawChip(graphics, x + 24, y + 72, "AUTO REFILL", AutoBuilderConfig.autoFetchMaterials());
         drawChip(graphics, x + 182, y + 72, "AUTO RESUME", AutoBuilderConfig.startBuildAfterFetch());
-        drawChip(graphics, x + 340, y + 72, "CHESTS " + AutoBuilderConfig.materialChestCount(), AutoBuilderConfig.materialChestCount() > 0);
+        drawChip(graphics, x + 340, y + 72, "AUTO CRAFT", AutoBuilderConfig.autoCraftMaterials());
+        drawChip(graphics, x + 498, y + 72, "CHESTS " + AutoBuilderConfig.materialChestCount(), AutoBuilderConfig.materialChestCount() > 0);
         graphics.text(this.font, "MODE: " + AutoBuildController.modeName(), x + 24, y + 94, modeColor());
         graphics.text(this.font, "BARITONE: " + BaritoneBridge.status(), x + 182, y + 94, BaritoneBridge.isAvailable() ? GREEN : RED);
 
         int sx = x + 24;
         int sy = y + 108;
         section(graphics, sx, sy, panelWidth - 48, 84, "01  MODE", "Auto build: placed schematic / Clear area: Baritone terrain menu");
-        section(graphics, sx, sy + 96, panelWidth - 48, 74, "02  MATERIALS", "Register material chests and automatic refill behavior");
-        section(graphics, sx, sy + 176, panelWidth - 48, 74, "03  MAINTENANCE", "Clear registrations, update, and close");
+        section(graphics, sx, sy + 96, panelWidth - 48, 104, "02  MATERIALS", "Register material chests, Baritone storage chests, refill, and crafting");
+        section(graphics, sx, sy + 212, panelWidth - 48, 74, "03  MAINTENANCE", "Clear registrations, update, and close");
 
         graphics.text(this.font, "SCHEMATIC: " + BaritoneBridge.openSchematicStatus(), x + 24, y + panelHeight - 58, DIM);
         graphics.text(this.font, "AUTO: " + AutoBuildController.status(), x + 24, y + panelHeight - 42, statusColor(AutoBuildController.status()));
@@ -171,6 +178,10 @@ public final class AutoBuilderScreen extends Screen {
 
     private static String autoResumeLabel() {
         return "AUTO RESUME: " + (AutoBuilderConfig.startBuildAfterFetch() ? "ON" : "OFF");
+    }
+
+    private static String autoCraftLabel() {
+        return "AUTO CRAFT MISSING MATERIALS: " + (AutoBuilderConfig.autoCraftMaterials() ? "ON" : "OFF");
     }
 
     private static String materialChestRegisterLabel() {

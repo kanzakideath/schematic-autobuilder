@@ -93,6 +93,10 @@ public final class MaterialChestProcess {
         return status;
     }
 
+    public static boolean hasMaterialSources() {
+        return !allMaterialChests().isEmpty();
+    }
+
     public static boolean isRegisteringChests() {
         return registeringChests;
     }
@@ -148,7 +152,7 @@ public final class MaterialChestProcess {
         }
         List<BlockPos> chests = sortedMaterialChests();
         if (chests.isEmpty()) {
-            status = "No material chest registered";
+            status = "No material or Baritone storage chest registered";
             AutoBuildController.message(status, ChatFormatting.YELLOW);
             return false;
         }
@@ -345,7 +349,7 @@ public final class MaterialChestProcess {
 
     private static boolean isBuildMaterial(ItemStack stack) {
         if (!neededItems.isEmpty()) {
-            return neededItems.contains(stack.getItem());
+            return neededItems.contains(stack.getItem()) || MaterialRecipeHelper.isUsefulForNeeded(stack, neededItems);
         }
         if (stack.getItem() instanceof BlockItem) {
             return true;
@@ -376,11 +380,21 @@ public final class MaterialChestProcess {
 
     private static List<BlockPos> sortedMaterialChests() {
         Minecraft minecraft = Minecraft.getInstance();
-        List<BlockPos> chests = new ArrayList<>(AutoBuilderConfig.materialChests());
+        List<BlockPos> chests = allMaterialChests();
         if (minecraft.player == null) {
             return chests;
         }
         chests.sort(Comparator.comparingDouble(pos -> minecraft.player.position().distanceToSqr(Vec3.atCenterOf(pos))));
+        return chests;
+    }
+
+    private static List<BlockPos> allMaterialChests() {
+        List<BlockPos> chests = new ArrayList<>(AutoBuilderConfig.materialChests());
+        for (BlockPos pos : BaritoneBridge.clearAreaStorageChests()) {
+            if (!chests.contains(pos)) {
+                chests.add(pos);
+            }
+        }
         return chests;
     }
 
