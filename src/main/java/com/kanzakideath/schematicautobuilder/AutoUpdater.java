@@ -1,6 +1,7 @@
 package com.kanzakideath.schematicautobuilder;
 
 import net.minecraft.client.Minecraft;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,7 +20,6 @@ import java.util.regex.Pattern;
 
 public final class AutoUpdater {
 
-    private static final String CURRENT_VERSION = "0.1.0+26.2";
     private static volatile boolean checking;
     private static volatile String status = "Idle";
 
@@ -56,7 +56,7 @@ public final class AutoUpdater {
                 manifest = new String(Base64.getMimeDecoder().decode(extract(manifest, "content")), StandardCharsets.UTF_8);
             }
             String version = extract(manifest, "version");
-            if (version.isBlank() || CURRENT_VERSION.equals(version)) {
+            if (version.isBlank() || currentVersion().equals(version)) {
                 status = "Latest";
                 return;
             }
@@ -92,6 +92,13 @@ public final class AutoUpdater {
         }
     }
 
+    private static String currentVersion() {
+        return FabricLoader.getInstance()
+                .getModContainer("schematicautobuilder")
+                .map(container -> container.getMetadata().getVersion().getFriendlyString())
+                .orElse("");
+    }
+
     private static String getText(String url) throws IOException, InterruptedException {
         return new String(getBytes(url), StandardCharsets.UTF_8);
     }
@@ -124,4 +131,3 @@ public final class AutoUpdater {
         return builder.toString();
     }
 }
-
