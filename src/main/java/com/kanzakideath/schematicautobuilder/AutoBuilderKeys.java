@@ -14,8 +14,16 @@ public final class AutoBuilderKeys {
             KeyMapping.Category.MISC
     );
 
+    private static final KeyMapping PAUSE_AUTOMATION = new KeyMapping(
+            "key.schematicautobuilder.pause_automation",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_K,
+            KeyMapping.Category.MISC
+    );
+
     private static final KeyMapping[] ALL = new KeyMapping[]{
-            OPEN_MENU
+            OPEN_MENU,
+            PAUSE_AUTOMATION
     };
 
     private AutoBuilderKeys() {}
@@ -33,7 +41,9 @@ public final class AutoBuilderKeys {
                 minecraft.setScreenAndShow(new AutoBuilderScreen());
             }
         }
-        MaterialChestProcess.tick(minecraft);
+        while (PAUSE_AUTOMATION.consumeClick()) {
+            AutoBuildController.togglePause();
+        }
+        AutoBuildController.tick(minecraft);
     }
 }
-
