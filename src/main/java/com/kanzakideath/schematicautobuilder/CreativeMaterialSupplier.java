@@ -2,6 +2,7 @@ package com.kanzakideath.schematicautobuilder;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.ChatFormatting;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -15,8 +16,8 @@ import java.lang.reflect.Method;
 import java.util.Set;
 
 public final class CreativeMaterialSupplier {
-    private static final int MAX_SUPPLIED_PER_PASS = 6;
-    private static final int RESERVED_EMPTY_SLOTS = 4;
+    private static final int MAX_SUPPLIED_PER_PASS = 18;
+    private static final int RESERVED_EMPTY_SLOTS = 0;
 
     private CreativeMaterialSupplier() {}
 
@@ -44,7 +45,7 @@ public final class CreativeMaterialSupplier {
             if (item == null || item == Items.AIR) {
                 continue;
             }
-            if (hasUsableStack(player, item)) {
+            if (hasFullStack(player, item)) {
                 continue;
             }
             if (supplied >= MAX_SUPPLIED_PER_PASS) {
@@ -61,7 +62,7 @@ public final class CreativeMaterialSupplier {
                 supplied++;
             }
         }
-        if (supplied < MAX_SUPPLIED_PER_PASS && !hasAnyUsableStack(player, scaffolds)) {
+        if (supplied < MAX_SUPPLIED_PER_PASS && !hasAnyFullStack(player, scaffolds)) {
             for (Item scaffold : scaffolds) {
                 if (scaffold == null || scaffold == Items.AIR) {
                     continue;
@@ -110,18 +111,18 @@ public final class CreativeMaterialSupplier {
         return -1;
     }
 
-    private static boolean hasAnyUsableStack(LocalPlayer player, Collection<Item> items) {
+    private static boolean hasAnyFullStack(LocalPlayer player, Collection<Item> items) {
         for (Item item : items) {
-            if (item != null && item != Items.AIR && hasUsableStack(player, item)) {
+            if (item != null && item != Items.AIR && hasFullStack(player, item)) {
                 return true;
             }
         }
         return false;
     }
 
-    private static boolean hasUsableStack(LocalPlayer player, Item item) {
+    private static boolean hasFullStack(LocalPlayer player, Item item) {
         for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
-            if (!stack.isEmpty() && stack.is(item)) {
+            if (!stack.isEmpty() && stack.is(item) && stack.getCount() >= Math.min(stack.getMaxStackSize(), item.getDefaultMaxStackSize())) {
                 return true;
             }
         }
@@ -154,13 +155,42 @@ public final class CreativeMaterialSupplier {
 
     private static boolean setCreativeSlot(Minecraft minecraft, LocalPlayer player, int inventorySlot, ItemStack stack) {
         try {
-            Method method = minecraft.gameMode.getClass().getMethod("handleCreativeModeItemAdd", ItemStack.class, int.class);
+            Method method = creativeAddMethod(minecraft);
+            if (method == null) {
+                AutoBuildController.message("Creative補充に失敗しました: creative slot method not found", ChatFormatting.RED);
+                return false;
+            }
             method.invoke(minecraft.gameMode, stack.copy(), inventorySlotToMenuSlot(inventorySlot));
             player.getInventory().getNonEquipmentItems().set(inventorySlot, stack.copy());
             return true;
-        } catch (ReflectiveOperationException | RuntimeException ignored) {
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            AutoBuildController.message("Creative補充に失敗しました: " + ex.getClass().getSimpleName(), ChatFormatting.RED);
             return false;
         }
+    }
+
+    private static Method creativeAddMethod(Minecraft minecraft) {
+        try {
+            Method exact = minecraft.gameMode.getClass().getMethod("handleCreativeModeItemAdd", ItemStack.class, int.class);
+            exact.setAccessible(true);
+            return exact;
+        } catch (ReflectiveOperationException ignored) {
+        }
+        for (Method method : minecraft.gameMode.getClass().getMethods()) {
+            Class<?>[] types = method.getParameterTypes();
+            if (types.length == 2 && types[0] == ItemStack.class && types[1] == int.class && method.getName().toLowerCase(java.util.Locale.ROOT).contains("creative")) {
+                method.setAccessible(true);
+                return method;
+            }
+        }
+        for (Method method : minecraft.gameMode.getClass().getDeclaredMethods()) {
+            Class<?>[] types = method.getParameterTypes();
+            if (types.length == 2 && types[0] == ItemStack.class && types[1] == int.class) {
+                method.setAccessible(true);
+                return method;
+            }
+        }
+        return null;
     }
 
     private static int inventorySlotToMenuSlot(int inventorySlot) {
