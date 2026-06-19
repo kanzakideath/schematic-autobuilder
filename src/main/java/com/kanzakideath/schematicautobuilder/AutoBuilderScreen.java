@@ -24,7 +24,7 @@ public final class AutoBuilderScreen extends Screen {
     private Page page = Page.MAIN;
 
     public AutoBuilderScreen() {
-        super(Component.literal("\u8a2d\u8a08\u56f3 \u81ea\u52d5\u5efa\u7bc9"));
+        super(Component.literal("\u8a2d\u8a08\u56f3 \u81ea\u52d5\u5efa\u7bc9\uff08\u30d9\u30fc\u30bf\u7248\uff09"));
     }
 
     @Override
@@ -53,7 +53,7 @@ public final class AutoBuilderScreen extends Screen {
         int gap = 6;
         int by = y + 134;
 
-        addRenderableWidget(button(x + 24, by, half, "\u81ea\u52d5\u5efa\u7bc9\u3092\u958b\u59cb", () -> {
+        addRenderableWidget(button(x + 24, by, half, "\u81ea\u52d5\u5efa\u7bc9\u3092\u958b\u59cb\uff08\u30d9\u30fc\u30bf\uff09", () -> {
             AutoBuildController.startFullAutoBuild();
             refresh();
         }));
@@ -294,9 +294,9 @@ public final class AutoBuilderScreen extends Screen {
         graphics.fill(x + 10, y + 10, x + panelWidth - 10, y + panelHeight - 10, 0x66000000);
         border(graphics, x + 10, y + 10, panelWidth - 20, panelHeight - 20, 0x6619EAF2);
 
-        graphics.centeredText(this.font, "\u8a2d \u8a08 \u56f3   \u81ea \u52d5 \u5efa \u7bc9", this.width / 2, y + 18, TEXT);
+        graphics.centeredText(this.font, "\u8a2d \u8a08 \u56f3   \u81ea \u52d5 \u5efa \u7bc9   BETA", this.width / 2, y + 18, TEXT);
         graphics.centeredText(this.font, "\u30e2\u30fc\u30c9\u9078\u629e / \u7d20\u6750\u88dc\u5145 / \u66f4\u65b0\u7aef\u672b", this.width / 2, y + 34, CYAN);
-        graphics.centeredText(this.font, "\u30ad\u30fc\u306fMinecraft\u306e\u64cd\u4f5c\u8a2d\u5b9a\u304b\u3089\u81ea\u7531\u306b\u5272\u308a\u5f53\u3066\u3067\u304d\u307e\u3059\u3002J\u56fa\u5b9a\u306f\u4f7f\u3063\u3066\u3044\u307e\u305b\u3093\u3002", this.width / 2, y + 52, DIM);
+        graphics.centeredText(this.font, "\u30d9\u30fc\u30bf\u7248: \u505c\u6b62\u6642\u306f\u81ea\u52d5\u8a3a\u65ad\u3067\u88dc\u5145/\u4f5c\u6210/\u518d\u521d\u671f\u5316\u3092\u8a66\u3057\u307e\u3059\u3002\u30ad\u30fc\u306fMinecraft\u306e\u64cd\u4f5c\u8a2d\u5b9a\u304b\u3089\u5272\u308a\u5f53\u3066\u3067\u304d\u307e\u3059\u3002", this.width / 2, y + 52, DIM);
 
         drawChip(graphics, x + 24, y + 72, "\u81ea\u52d5\u88dc\u5145", AutoBuilderConfig.autoFetchMaterials());
         drawChip(graphics, x + 182, y + 72, "\u88dc\u5145\u5f8c\u518d\u958b", AutoBuilderConfig.startBuildAfterFetch());
@@ -313,7 +313,7 @@ public final class AutoBuilderScreen extends Screen {
             case CHESTS -> drawChestsPage(graphics, sx, sy, panelWidth - 48);
             case MATERIALS -> drawMaterialsPage(graphics, sx, sy, panelWidth - 48);
             default -> {
-                section(graphics, sx, sy, panelWidth - 48, 84, "01  \u30e2\u30fc\u30c9", "\u914d\u7f6e\u6e08\u307f\u8a2d\u8a08\u56f3\u306e\u81ea\u52d5\u5efa\u7bc9\u3001\u307e\u305f\u306fBaritone\u6574\u5730\u30e2\u30fc\u30c9\u3092\u958b\u59cb\u3057\u307e\u3059");
+                section(graphics, sx, sy, panelWidth - 48, 84, "01  \u30e2\u30fc\u30c9\uff08\u81ea\u52d5\u5efa\u7bc9\u306f\u30d9\u30fc\u30bf\u7248\uff09", "\u914d\u7f6e\u6e08\u307f\u8a2d\u8a08\u56f3\u306e\u81ea\u52d5\u5efa\u7bc9\u3001\u307e\u305f\u306fBaritone\u6574\u5730\u30e2\u30fc\u30c9\u3092\u958b\u59cb\u3057\u307e\u3059");
                 section(graphics, sx, sy + 96, panelWidth - 48, 134, "02  \u7d20\u6750\u88dc\u5145", "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3068\u6574\u5730\u4fdd\u7ba1\u30c1\u30a7\u30b9\u30c8\u304b\u3089\u5c11\u91cf\u305a\u3064\u88dc\u5145\u3057\u3001\u4e0d\u8db3\u5206\u306f\u4f5c\u6210/\u7cbe\u932c\u3057\u307e\u3059");
                 section(graphics, sx, sy + 242, panelWidth - 48, 74, "03  \u7ba1\u7406", "\u5efa\u7bc9\u9806\u5e8f\u3001\u6728\u6750/\u8272\u7d20\u6750\u306e\u4ee3\u7528\u3001\u7d20\u6750\u767b\u9332\u3001\u66f4\u65b0\u78ba\u8a8d\u3067\u3059");
             }
@@ -413,6 +413,7 @@ public final class AutoBuilderScreen extends Screen {
             case "FETCHING" -> "\u7d20\u6750\u88dc\u5145\u4e2d";
             case "CRAFTING" -> "\u7d20\u6750\u4f5c\u6210\u4e2d";
             case "SMELTING" -> "\u7d20\u6750\u7cbe\u932c\u4e2d";
+            case "DIAGNOSING" -> "\u81ea\u52d5\u8a3a\u65ad\u4e2d";
             case "WAITING_FOR_MATERIALS" -> "\u7d20\u6750\u5f85\u3061";
             case "PAUSED" -> "\u4e00\u6642\u505c\u6b62\u4e2d";
             case "COMPLETE" -> "\u5b8c\u4e86";

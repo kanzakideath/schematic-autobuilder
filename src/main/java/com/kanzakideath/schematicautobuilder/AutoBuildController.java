@@ -16,11 +16,14 @@ import java.util.Set;
 public final class AutoBuildController {
 
     private static final String MATERIAL_SHORTAGE = "\u8cc7\u6750\u304c\u8db3\u308a\u307e\u305b\u3093";
-    private static final String MATERIAL_SHORTAGE_HINT = "\u767b\u9332\u30c1\u30a7\u30b9\u30c8\u306b\u8cc7\u6750\u3092\u8ffd\u52a0\u3057\u3066\u304b\u3089\u3001\u4e00\u6642\u505c\u6b62/\u518d\u958b\u307e\u305f\u306f\u958b\u59cb\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
+    private static final String MATERIAL_SHORTAGE_HINT = "\u81ea\u52d5\u8a3a\u65ad\u304c\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3001\u30af\u30e9\u30d5\u30c8\u3001\u7cbe\u932c\u3001Baritone\u518d\u521d\u671f\u5316\u3092\u9806\u306b\u8a66\u3057\u307e\u3059\u3002";
     private static final int INITIAL_REFETCH_GUARD_TICKS = 10;
     private static final int RESUME_REFETCH_GUARD_TICKS = 10;
     private static final int CREATIVE_REFETCH_GUARD_TICKS = 10;
     private static final int WAITING_RETRY_TICKS = 60;
+    private static final int DIAGNOSTIC_RETRY_TICKS = 40;
+    private static final int DIAGNOSTIC_NOTICE_TICKS = 100;
+    private static final int MAX_DIAGNOSTIC_RESTARTS = 6;
 
     private enum Mode {
         IDLE,
@@ -28,6 +31,7 @@ public final class AutoBuildController {
         FETCHING,
         CRAFTING,
         SMELTING,
+        DIAGNOSING,
         WAITING_FOR_MATERIALS,
         PAUSED,
         COMPLETE,
@@ -48,6 +52,8 @@ public final class AutoBuildController {
     private static int inactiveTicks;
     private static int refetchGuardTicks;
     private static int creativeSupplyTicks;
+    private static int diagnosticAttempts;
+    private static int diagnosticNoticeTicks;
     private static boolean materialShortageNotified;
     private static String status = "Idle";
     private static Set<Item> lastNeededItems = Set.of();
@@ -72,6 +78,9 @@ public final class AutoBuildController {
         if (creativeSupplyTicks > 0) {
             creativeSupplyTicks--;
         }
+        if (diagnosticNoticeTicks > 0) {
+            diagnosticNoticeTicks--;
+        }
         if (mode == Mode.WAITING_FOR_MATERIALS) {
             retryWaitingForMaterials();
             return;
@@ -80,7 +89,7 @@ public final class AutoBuildController {
             return;
         }
 
-        if (mode == Mode.BUILDING) {
+        if (mode == Mode.BUILDING || mode == Mode.DIAGNOSING) {
             monitorBuilder();
         }
     }
@@ -105,6 +114,8 @@ public final class AutoBuildController {
         inactiveTicks = 0;
         refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
         creativeSupplyTicks = 0;
+        diagnosticAttempts = 0;
+        diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
@@ -134,6 +145,8 @@ public final class AutoBuildController {
         BaritoneBridge.cancelPathing();
         mode = Mode.CANCELLED;
         pausedFrom = Mode.IDLE;
+        diagnosticAttempts = 0;
+        diagnosticNoticeTicks = 0;
         lastNeededItems = Set.of();
         status = "Cancelled";
         cachedSnapshotAtMs = 0L;
@@ -197,7 +210,7 @@ public final class AutoBuildController {
 
     private static boolean isAutoBuildAutomationMode() {
         return switch (mode) {
-            case BUILDING, FETCHING, CRAFTING, SMELTING, WAITING_FOR_MATERIALS -> true;
+            case BUILDING, FETCHING, CRAFTING, SMELTING, DIAGNOSING, WAITING_FOR_MATERIALS -> true;
             default -> false;
         };
     }
@@ -217,7 +230,7 @@ public final class AutoBuildController {
     }
 
     public static boolean isRunning() {
-        return mode == Mode.BUILDING || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING || mode == Mode.WAITING_FOR_MATERIALS || mode == Mode.PAUSED;
+        return mode == Mode.BUILDING || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING || mode == Mode.DIAGNOSING || mode == Mode.WAITING_FOR_MATERIALS || mode == Mode.PAUSED;
     }
 
     public static String status() {
@@ -249,27 +262,14 @@ public final class AutoBuildController {
         if (BaritoneBridge.isBuilderPaused()) {
             builderPausedTicks++;
             inactiveTicks = 0;
-            status = MATERIAL_SHORTAGE;
+            status = "自動診断中: Baritone が一時停止しました";
             rememberNeededItems();
-            if (builderPausedTicks >= 1 && (refetchGuardTicks == 0 || isCreativeMode()) && supplyCreativeAndResume()) {
-                return;
-            }
-            if (builderPausedTicks >= 20 && isCreativeMode() && refetchGuardTicks == 0 && AutoBuilderConfig.startBuildAfterFetch()) {
-                refetchGuardTicks = CREATIVE_REFETCH_GUARD_TICKS;
-                resumeBuildAfterMaterialChange("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u3067\u5efa\u7bc9\u3092\u518d\u8a66\u884c\u3057\u307e\u3059");
-                return;
-            }
-            if (builderPausedTicks >= 10 && AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources() && refetchGuardTicks == 0) {
-                materialShortageNotified = false;
-                startMaterialFetchForBuild(MATERIAL_SHORTAGE + ": checking registered material chests");
-                return;
-            }
-            if (builderPausedTicks >= 20 && refetchGuardTicks == 0 && tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4e0d\u8db3\u5206\u3092\u4f5c\u6210\u4e2d")) {
+            if (builderPausedTicks >= 6 && (refetchGuardTicks == 0 || isCreativeMode()) && runAutoDiagnostic("Baritone が建築を止めました", true)) {
                 return;
             }
             if (builderPausedTicks >= 30 && !materialShortageNotified) {
                 materialShortageNotified = true;
-                message(MATERIAL_SHORTAGE + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
+                message("自動診断中です。" + MATERIAL_SHORTAGE_HINT, ChatFormatting.YELLOW);
             }
             return;
         }
@@ -279,16 +279,61 @@ public final class AutoBuildController {
         supplyCreativeWhileBuilding();
         if (BaritoneBridge.isBuilderActive()) {
             inactiveTicks = 0;
+            diagnosticAttempts = 0;
             status = "Building";
             return;
         }
 
         inactiveTicks++;
         if (inactiveTicks > 80) {
-            mode = Mode.COMPLETE;
-            status = "Build complete or Baritone idle";
-            message(status, ChatFormatting.GREEN);
+            BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
+            if (stats.totalBlocks() > 0 && stats.remainingBlocks() <= 0) {
+                mode = Mode.COMPLETE;
+                status = "Build complete";
+                message(status, ChatFormatting.GREEN);
+                return;
+            }
+            if (refetchGuardTicks == 0) {
+                runAutoDiagnostic("Baritone が待機状態のまま進んでいません", true);
+            } else {
+                status = "自動診断待機中: Baritone idle";
+            }
         }
+    }
+
+    private static boolean runAutoDiagnostic(String trigger, boolean allowChestFetch) {
+        mode = Mode.DIAGNOSING;
+        status = "自動診断中: " + trigger;
+        if (diagnosticNoticeTicks <= 0) {
+            diagnosticNoticeTicks = DIAGNOSTIC_NOTICE_TICKS;
+            message(status + "。代替手順を試します。", ChatFormatting.AQUA);
+        }
+        rememberNeededItems();
+        if (supplyCreativeAndResume()) {
+            return true;
+        }
+        if (allowChestFetch && AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources() && !MaterialChestProcess.isRunning()) {
+            materialShortageNotified = false;
+            startMaterialFetchForBuild("自動診断: 素材チェストから補充します");
+            return true;
+        }
+        if (tryMaterialCreationForBuild("自動診断: 手持ち素材から作れる分を作成します")) {
+            return true;
+        }
+        if (AutoBuilderConfig.startBuildAfterFetch() && diagnosticAttempts < MAX_DIAGNOSTIC_RESTARTS) {
+            diagnosticAttempts++;
+            refetchGuardTicks = DIAGNOSTIC_RETRY_TICKS;
+            resumeBuildAfterMaterialChange("自動診断: Baritone を再初期化して建築を再開します (" + diagnosticAttempts + "/" + MAX_DIAGNOSTIC_RESTARTS + ")");
+            return true;
+        }
+        mode = Mode.WAITING_FOR_MATERIALS;
+        refetchGuardTicks = DIAGNOSTIC_RETRY_TICKS;
+        status = "自動診断: 代替手順待機中。" + MATERIAL_SHORTAGE_HINT;
+        if (!materialShortageNotified) {
+            materialShortageNotified = true;
+            message(status, ChatFormatting.YELLOW);
+        }
+        return false;
     }
 
     private static void startMaterialFetchForBuild(String reason) {
@@ -311,7 +356,7 @@ public final class AutoBuildController {
             return;
         }
         if (!result.tookMaterials()) {
-            if (tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4f5c\u308c\u308b\u5206\u3092\u4f5c\u6210\u4e2d")) {
+            if (runAutoDiagnostic("素材チェストから必要素材を取れませんでした", false)) {
                 return;
             }
             mode = Mode.WAITING_FOR_MATERIALS;
@@ -406,20 +451,7 @@ public final class AutoBuildController {
         if (refetchGuardTicks > 0) {
             return;
         }
-        rememberNeededItems();
-        if (supplyCreativeAndResume()) {
-            return;
-        }
-        if (isCreativeMode() && AutoBuilderConfig.startBuildAfterFetch()) {
-            refetchGuardTicks = CREATIVE_REFETCH_GUARD_TICKS;
-            resumeBuildAfterMaterialChange("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u306e\u305f\u3081\u5efa\u7bc9\u3092\u518d\u8a66\u884c\u3057\u307e\u3059");
-            return;
-        }
-        if (tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4e0d\u8db3\u5206\u3092\u4f5c\u6210\u4e2d")) {
-            return;
-        }
-        if (AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources()) {
-            startMaterialFetchForBuild(MATERIAL_SHORTAGE + ": checking registered material chests");
+        if (runAutoDiagnostic("素材不足で待機しています", true)) {
             return;
         }
         if (!materialShortageNotified) {
@@ -588,7 +620,7 @@ public final class AutoBuildController {
         if (MaterialChestProcess.isRegisteringChests()) {
             return "MATERIAL CHEST REGISTRATION";
         }
-        if (mode == Mode.BUILDING || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING || mode == Mode.WAITING_FOR_MATERIALS || mode == Mode.PAUSED || mode == Mode.COMPLETE) {
+        if (mode == Mode.BUILDING || mode == Mode.FETCHING || mode == Mode.CRAFTING || mode == Mode.SMELTING || mode == Mode.DIAGNOSING || mode == Mode.WAITING_FOR_MATERIALS || mode == Mode.PAUSED || mode == Mode.COMPLETE) {
             return "AUTO BUILD";
         }
         if (BaritoneBridge.isClearingAreaActive() || lastWorkMode == WorkMode.CLEAR_AREA) {
@@ -606,6 +638,7 @@ public final class AutoBuildController {
             case FETCHING -> "チェスト補充中";
             case CRAFTING -> "素材作成中";
             case SMELTING -> "精錬中";
+            case DIAGNOSING -> "自動診断中";
             case WAITING_FOR_MATERIALS -> "素材不足";
             case PAUSED -> "一時停止";
             case COMPLETE -> "完了";
@@ -630,6 +663,7 @@ public final class AutoBuildController {
         }
         return switch (mode) {
             case BUILDING -> stats.target().isBlank() ? "Baritone 移動要求中" : "ブロック設置中";
+            case DIAGNOSING -> "原因分析と代替手順を実行中";
             case WAITING_FOR_MATERIALS -> "素材探索中";
             case PAUSED -> "一時停止中";
             case COMPLETE -> "完了";
