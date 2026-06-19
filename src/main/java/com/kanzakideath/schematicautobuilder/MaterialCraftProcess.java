@@ -58,6 +58,10 @@ public final class MaterialCraftProcess {
     }
 
     public static boolean start(CraftCallback craftCallback) {
+        return start(craftCallback, BaritoneBridge.currentNeededBuildItems());
+    }
+
+    public static boolean start(CraftCallback craftCallback, Set<Item> neededOverride) {
         if (state != State.IDLE) {
             status = "Material crafting already running";
             return false;
@@ -66,7 +70,7 @@ public final class MaterialCraftProcess {
         if (minecraft.player == null || minecraft.level == null || minecraft.gameMode == null) {
             return false;
         }
-        Set<Item> needed = BaritoneBridge.currentNeededBuildItems();
+        Set<Item> needed = neededOverride == null ? Set.of() : Set.copyOf(neededOverride);
         if (needed.isEmpty() || MaterialRecipeHelper.findCraftableCraftingRecipe(minecraft, minecraft.player, needed) == null) {
             status = "No craftable needed material";
             return false;

@@ -4,6 +4,9 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.Item;
+
+import java.util.Set;
 
 public final class AutoBuildController {
 
@@ -28,6 +31,7 @@ public final class AutoBuildController {
     private static int refetchGuardTicks;
     private static boolean materialShortageNotified;
     private static String status = "Idle";
+    private static Set<Item> lastNeededItems = Set.of();
 
     private AutoBuildController() {}
 
@@ -73,6 +77,11 @@ public final class AutoBuildController {
         materialShortageNotified = false;
         mode = Mode.BUILDING;
         status = "Building from placed schematic";
+        rememberNeededItems();
+        int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems);
+        if (supplied > 0) {
+            message("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304b\u3089\u4e0d\u8db3\u5019\u88dc\u3092\u88dc\u5145\u3057\u307e\u3057\u305f: " + supplied, ChatFormatting.GREEN);
+        }
         message("Full auto build started", ChatFormatting.AQUA);
     }
 
@@ -119,6 +128,13 @@ public final class AutoBuildController {
             builderPausedTicks++;
             inactiveTicks = 0;
             status = MATERIAL_SHORTAGE;
+            rememberNeededItems();
+            if (builderPausedTicks >= 20 && refetchGuardTicks == 0 && supplyCreativeAndResume()) {
+                return;
+            }
+            if (builderPausedTicks >= 20 && refetchGuardTicks == 0 && tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4e0d\u8db3\u5206\u3092\u4f5c\u6210\u4e2d")) {
+                return;
+            }
             if (builderPausedTicks >= 40 && AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources() && refetchGuardTicks == 0) {
                 materialShortageNotified = false;
                 startMaterialFetchForBuild(MATERIAL_SHORTAGE + ": checking registered material chests");
@@ -164,21 +180,20 @@ public final class AutoBuildController {
             return;
         }
         if (!result.tookMaterials()) {
+            if (tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4f5c\u308c\u308b\u5206\u3092\u4f5c\u6210\u4e2d")) {
+                return;
+            }
+            if (result.inventoryFull() && AutoBuilderConfig.startBuildAfterFetch()) {
+                refetchGuardTicks = 100;
+                resumeBuildAfterMaterialChange("\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304c\u6e80\u676f\u306e\u305f\u3081\u3001\u73fe\u5728\u306e\u624b\u6301\u3061\u7d20\u6750\u3067\u5efa\u7bc9\u3092\u518d\u958b\u3057\u307e\u3059");
+                return;
+            }
             mode = Mode.WAITING_FOR_MATERIALS;
             status = result.message().isBlank() ? MATERIAL_SHORTAGE : result.message();
             message(status + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
             return;
         }
-        if (AutoBuilderConfig.autoCraftMaterials() && MaterialSmeltProcess.start(AutoBuildController::onBuildSmeltFinished)) {
-            mode = Mode.SMELTING;
-            status = "Smelting fetched materials";
-            message(status, ChatFormatting.AQUA);
-            return;
-        }
-        if (AutoBuilderConfig.autoCraftMaterials() && MaterialCraftProcess.start(AutoBuildController::onBuildCraftFinished)) {
-            mode = Mode.CRAFTING;
-            status = "Crafting fetched materials";
-            message(status, ChatFormatting.AQUA);
+        if (tryMaterialCreationForBuild("\u88dc\u5145\u3057\u305f\u7d20\u6750\u304b\u3089\u4f5c\u308c\u308b\u5206\u3092\u4f5c\u6210\u4e2d")) {
             return;
         }
         if (!AutoBuilderConfig.startBuildAfterFetch()) {
@@ -217,7 +232,7 @@ public final class AutoBuildController {
         if (mode == Mode.PAUSED) {
             return;
         }
-        if (AutoBuilderConfig.autoCraftMaterials() && MaterialCraftProcess.start(AutoBuildController::onBuildCraftFinished)) {
+        if (AutoBuilderConfig.autoCraftMaterials() && MaterialCraftProcess.start(AutoBuildController::onBuildCraftFinished, lastNeededItems)) {
             mode = Mode.CRAFTING;
             status = "Crafting smelted materials";
             message(status, ChatFormatting.AQUA);
@@ -234,19 +249,65 @@ public final class AutoBuildController {
     }
 
     private static void resumeBuildAfterFetch(int stacksTaken) {
+        resumeBuildAfterMaterialChange("Resumed build after fetching " + stacksTaken + " stack(s)");
+    }
+
+    private static void resumeBuildAfterMaterialChange(String resumeStatus) {
         BaritoneBridge.resumeBuilder();
         materialShortageNotified = false;
         if (!BaritoneBridge.startPlacedSchematicBuild()) {
             mode = Mode.WAITING_FOR_MATERIALS;
-            status = "Fetched " + stacksTaken + " stack(s), but no placed schematic was found";
+            status = "\u8a2d\u8a08\u56f3\u304c\u898b\u3064\u304b\u3089\u306a\u3044\u305f\u3081\u518d\u958b\u3067\u304d\u307e\u305b\u3093";
             message(status, ChatFormatting.YELLOW);
             return;
         }
         builderPausedTicks = 0;
         inactiveTicks = 0;
         mode = Mode.BUILDING;
-        status = "Resumed build after fetching " + stacksTaken + " stack(s)";
+        status = resumeStatus;
         message(status, ChatFormatting.GREEN);
+    }
+
+    private static Set<Item> rememberNeededItems() {
+        Set<Item> current = BaritoneBridge.currentNeededBuildItems();
+        if (!current.isEmpty()) {
+            lastNeededItems = Set.copyOf(current);
+        }
+        return lastNeededItems;
+    }
+
+    private static boolean supplyCreativeAndResume() {
+        Set<Item> needed = rememberNeededItems();
+        int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), needed);
+        if (supplied <= 0) {
+            return false;
+        }
+        refetchGuardTicks = 60;
+        resumeBuildAfterMaterialChange("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304b\u3089\u4e0d\u8db3\u7d20\u6750\u3092\u88dc\u5145\u3057\u3066\u518d\u958b\u3057\u307e\u3057\u305f");
+        return true;
+    }
+
+    private static boolean tryMaterialCreationForBuild(String progressStatus) {
+        if (!AutoBuilderConfig.autoCraftMaterials()) {
+            return false;
+        }
+        Set<Item> needed = rememberNeededItems();
+        if (needed.isEmpty()) {
+            return false;
+        }
+        if (MaterialCraftProcess.start(AutoBuildController::onBuildCraftFinished, needed)) {
+            mode = Mode.CRAFTING;
+            status = progressStatus;
+            message(status, ChatFormatting.AQUA);
+            return true;
+        }
+        if (MaterialSmeltProcess.start(AutoBuildController::onBuildSmeltFinished, needed)) {
+            mode = Mode.SMELTING;
+            status = progressStatus;
+            message(status, ChatFormatting.AQUA);
+            return true;
+        }
+        return false;
     }
 
     private static void pause() {
@@ -294,6 +355,7 @@ public final class AutoBuildController {
         }
         mode = Mode.IDLE;
         status = "Idle";
+        lastNeededItems = Set.of();
         message("Auto builder resumed", ChatFormatting.GREEN);
     }
 

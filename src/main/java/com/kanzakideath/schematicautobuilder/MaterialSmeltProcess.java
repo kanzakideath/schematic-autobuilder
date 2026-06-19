@@ -62,6 +62,10 @@ public final class MaterialSmeltProcess {
     }
 
     public static boolean start(SmeltCallback smeltCallback) {
+        return start(smeltCallback, BaritoneBridge.currentNeededBuildItems());
+    }
+
+    public static boolean start(SmeltCallback smeltCallback, Set<Item> neededOverride) {
         if (state != State.IDLE) {
             status = "Material smelting already running";
             return false;
@@ -70,7 +74,7 @@ public final class MaterialSmeltProcess {
         if (minecraft.player == null || minecraft.level == null || minecraft.gameMode == null) {
             return false;
         }
-        Set<Item> needed = BaritoneBridge.currentNeededBuildItems();
+        Set<Item> needed = neededOverride == null ? Set.of() : Set.copyOf(neededOverride);
         SmeltPlan selected = findPlan(minecraft.player, needed);
         if (selected == null) {
             status = "No smeltable needed material";
