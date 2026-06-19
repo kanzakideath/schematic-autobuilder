@@ -246,7 +246,7 @@ public final class MaterialChestProcess {
         if (totalTakenStacks > 0) {
             finish("Fetched " + totalTakenStacks + " material stack(s)", ChatFormatting.GREEN, true);
         } else {
-            finish("No usable build materials found in registered chests", ChatFormatting.YELLOW, false);
+            finish(materialShortageMessage(), ChatFormatting.RED, false);
         }
     }
 
@@ -307,6 +307,12 @@ public final class MaterialChestProcess {
                 || stack.is(Items.COBBLESTONE)
                 || stack.is(Items.REDSTONE)
                 || stack.is(Items.STRING);
+    }
+
+    private static String materialShortageMessage() {
+        return neededItems.isEmpty()
+                ? "資材が足りません"
+                : "資材が足りません: 登録チェストに設計図で必要な素材がありません";
     }
 
     private static boolean inventoryAlmostFull(LocalPlayer player) {

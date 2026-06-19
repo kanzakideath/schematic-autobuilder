@@ -151,8 +151,8 @@ public final class AutoBuildController {
         }
         if (!result.tookMaterials()) {
             mode = Mode.WAITING_FOR_MATERIALS;
-            status = "No usable build materials found in registered chests";
-            message(status + ". Add materials, then press pause/resume or start again.", ChatFormatting.YELLOW);
+            status = result.message().isBlank() ? "資材が足りません" : result.message();
+            message(status + "。チェストに資材を追加してから、一時停止/再開または開始を押してください。", ChatFormatting.RED);
             return;
         }
         if (!AutoBuilderConfig.startBuildAfterFetch()) {

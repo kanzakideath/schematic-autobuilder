@@ -24,6 +24,7 @@ build workflows.
 - One-button start for placed Litematica/Schematica schematics.
 - Register material chests by looking at a chest and pressing the menu button.
 - Automatically switches to registered material chests when Baritone pauses from missing materials.
+- Shows `資材が足りません` when registered chests do not contain usable schematic materials.
 - Returns to the placed schematic and restarts the builder after a successful refill.
 - Visits each registered material chest once per refill pass, so empty chests do not open/close in a loop.
 - Uses Baritone's exact schematic builder settings: direction-sensitive blocks are not ignored, and incorrect existing blocks are repaired by Baritone.
@@ -50,5 +51,5 @@ pathing.
 Output:
 
 ```text
-build/libs/schematic-autobuilder-0.2.4+26.2.jar
+build/libs/schematic-autobuilder-0.2.6+26.2.jar
 ```
