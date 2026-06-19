@@ -17,8 +17,8 @@ public final class AutoBuildController {
 
     private static final String MATERIAL_SHORTAGE = "\u8cc7\u6750\u304c\u8db3\u308a\u307e\u305b\u3093";
     private static final String MATERIAL_SHORTAGE_HINT = "\u767b\u9332\u30c1\u30a7\u30b9\u30c8\u306b\u8cc7\u6750\u3092\u8ffd\u52a0\u3057\u3066\u304b\u3089\u3001\u4e00\u6642\u505c\u6b62/\u518d\u958b\u307e\u305f\u306f\u958b\u59cb\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002";
-    private static final int INITIAL_REFETCH_GUARD_TICKS = 40;
-    private static final int RESUME_REFETCH_GUARD_TICKS = 40;
+    private static final int INITIAL_REFETCH_GUARD_TICKS = 10;
+    private static final int RESUME_REFETCH_GUARD_TICKS = 10;
     private static final int CREATIVE_REFETCH_GUARD_TICKS = 10;
     private static final int WAITING_RETRY_TICKS = 60;
 
@@ -259,13 +259,15 @@ public final class AutoBuildController {
                 resumeBuildAfterMaterialChange("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u3067\u5efa\u7bc9\u3092\u518d\u8a66\u884c\u3057\u307e\u3059");
                 return;
             }
+            if (builderPausedTicks >= 10 && AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources() && refetchGuardTicks == 0) {
+                materialShortageNotified = false;
+                startMaterialFetchForBuild(MATERIAL_SHORTAGE + ": checking registered material chests");
+                return;
+            }
             if (builderPausedTicks >= 20 && refetchGuardTicks == 0 && tryMaterialCreationForBuild("\u624b\u6301\u3061\u7d20\u6750\u304b\u3089\u4e0d\u8db3\u5206\u3092\u4f5c\u6210\u4e2d")) {
                 return;
             }
-            if (builderPausedTicks >= 40 && AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources() && refetchGuardTicks == 0) {
-                materialShortageNotified = false;
-                startMaterialFetchForBuild(MATERIAL_SHORTAGE + ": checking registered material chests");
-            } else if (builderPausedTicks >= 40 && !materialShortageNotified) {
+            if (builderPausedTicks >= 30 && !materialShortageNotified) {
                 materialShortageNotified = true;
                 message(MATERIAL_SHORTAGE + "\u3002" + MATERIAL_SHORTAGE_HINT, ChatFormatting.RED);
             }

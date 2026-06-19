@@ -415,6 +415,10 @@ public final class BaritoneBridge {
             return Set.of();
         }
         try {
+            Set<Item> missing = currentMissingBuildItems(builder);
+            if (!missing.isEmpty()) {
+                return missing;
+            }
             Object schematic = privateField(builder, "schematic");
             Object incorrect = privateField(builder, "incorrectPositions");
             Object originObject = privateField(builder, "origin");
@@ -433,7 +437,6 @@ public final class BaritoneBridge {
             );
             desiredState.setAccessible(true);
             Set<Item> result = new HashSet<>();
-            int scanned = 0;
             for (Object posObject : (Iterable<?>) incorrect) {
                 if (!(posObject instanceof BlockPos pos)) {
                     continue;
@@ -453,9 +456,29 @@ public final class BaritoneBridge {
                         result.add(item);
                     }
                 }
-                scanned++;
-                if (scanned >= 512) {
+                if (result.size() >= 64) {
                     break;
+                }
+            }
+            return result;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return Set.of();
+        }
+    }
+
+    private static Set<Item> currentMissingBuildItems(Object builder) {
+        try {
+            Object missingObject = privateField(builder, "lastMissingMaterials");
+            if (!(missingObject instanceof Map<?, ?> missingMap) || missingMap.isEmpty()) {
+                return Set.of();
+            }
+            Set<Item> result = new HashSet<>();
+            for (Object key : missingMap.keySet()) {
+                if (key instanceof BlockState state && !state.isAir()) {
+                    Item item = state.getBlock().asItem();
+                    if (item != Items.AIR) {
+                        result.add(item);
+                    }
                 }
             }
             return result;

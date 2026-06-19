@@ -69,32 +69,48 @@ public final class AutoBuilderKeys {
 
     public static void onClientTick(Minecraft minecraft) {
         migrateOldDefaultKeys(minecraft);
+        boolean gameInputAllowed = minecraft.gui.screen() == null;
         while (OPEN_MENU.consumeClick()) {
-            openMenu(minecraft);
+            if (gameInputAllowed) {
+                openMenu(minecraft);
+            }
         }
         if (minecraft.player == null || minecraft.level == null) {
             return;
         }
         while (PAUSE_AUTOMATION.consumeClick()) {
-            AutoBuildController.toggleSharedPauseKey();
+            if (gameInputAllowed) {
+                AutoBuildController.toggleSharedPauseKey();
+            }
         }
         while (START_OR_RESUME.consumeClick()) {
-            AutoBuildController.startOrResumeAutoBuild();
+            if (gameInputAllowed) {
+                AutoBuildController.startOrResumeAutoBuild();
+            }
         }
         while (STOP_AUTOMATION.consumeClick()) {
-            AutoBuildController.cancelAutomation();
+            if (gameInputAllowed) {
+                AutoBuildController.cancelAutomation();
+            }
         }
         while (TOGGLE_HUD_DETAIL.consumeClick()) {
-            AutoBuilderConfig.toggleHudDetailed();
+            if (gameInputAllowed) {
+                AutoBuilderConfig.toggleHudDetailed();
+            }
         }
         while (TOGGLE_MATERIAL_CHEST_REGISTRATION.consumeClick()) {
-            AutoBuildController.toggleMaterialChestRegistration(minecraft);
+            if (gameInputAllowed) {
+                AutoBuildController.toggleMaterialChestRegistration(minecraft);
+            }
         }
         AutoBuildController.tick(minecraft);
     }
 
     public static boolean handleGlobalKey(Minecraft minecraft, int action, KeyEvent event) {
         if (action != GLFW.GLFW_PRESS || minecraft == null || event == null) {
+            return false;
+        }
+        if (minecraft.gui.screen() != null) {
             return false;
         }
         if (OPEN_MENU.matches(event)) {
