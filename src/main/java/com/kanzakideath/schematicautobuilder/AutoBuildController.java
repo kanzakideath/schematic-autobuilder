@@ -29,7 +29,6 @@ public final class AutoBuildController {
     private static final int CREATIVE_SMALL_REMAINING_STALL_TICKS = 60;
     private static final int CREATIVE_COMMAND_FILL_REMAINING_THRESHOLD = 512;
     private static final int CREATIVE_COMMAND_FILL_BATCH = 64;
-    private static final int CREATIVE_COMPLETE_REMAINING_TOLERANCE = 8;
 
     private enum Mode {
         IDLE,
@@ -64,6 +63,7 @@ public final class AutoBuildController {
     private static int lastRemainingBlocks = -1;
     private static String lastProgressTarget = "";
     private static boolean materialShortageNotified;
+    private static boolean baritoneReportedFinished;
     private static String status = "Idle";
     private static String activeSchematicFileName = "";
     private static BlockPos activeSchematicOrigin;
@@ -92,6 +92,10 @@ public final class AutoBuildController {
         if (diagnosticNoticeTicks > 0) {
             diagnosticNoticeTicks--;
         }
+        if (baritoneReportedFinished && isAutoBuildAutomationMode()) {
+            completeBuild("Build complete");
+            return;
+        }
         if ((isAutoBuildAutomationMode() || mode == Mode.PAUSED) && BaritoneBridge.isClearingAreaActive()) {
             prepareForExternalClearArea();
             return;
@@ -118,6 +122,7 @@ public final class AutoBuildController {
         diagnosticAttempts = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
+        baritoneReportedFinished = false;
         resetProgressWatch();
         status = completeStatus;
         cachedSnapshotAtMs = 0L;
@@ -135,9 +140,18 @@ public final class AutoBuildController {
         diagnosticAttempts = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
+        baritoneReportedFinished = false;
         resetProgressWatch();
         status = "整地モードに切り替え";
         cachedSnapshotAtMs = 0L;
+    }
+
+    public static void onBaritoneBuildFinished() {
+        if (isAutoBuildAutomationMode()) {
+            baritoneReportedFinished = true;
+            status = "Baritone reported build complete";
+            cachedSnapshotAtMs = 0L;
+        }
     }
 
     public static void startFullAutoBuild() {
@@ -165,6 +179,7 @@ public final class AutoBuildController {
         diagnosticAttempts = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
+        baritoneReportedFinished = false;
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = "Building from placed schematic";
@@ -209,6 +224,7 @@ public final class AutoBuildController {
         diagnosticAttempts = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
+        baritoneReportedFinished = false;
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = BaritoneBridge.schematicFileStatus();
@@ -252,6 +268,7 @@ public final class AutoBuildController {
         diagnosticAttempts = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
+        baritoneReportedFinished = false;
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = BaritoneBridge.schematicFileStatus();
@@ -285,6 +302,7 @@ public final class AutoBuildController {
         lastNeededItems = Set.of();
         activeSchematicFileName = "";
         activeSchematicOrigin = null;
+        baritoneReportedFinished = false;
         status = "Cancelled";
         cachedSnapshotAtMs = 0L;
         message("Auto builder stopped", ChatFormatting.YELLOW);
@@ -396,11 +414,6 @@ public final class AutoBuildController {
     }
 
     private static void monitorBuilder() {
-        BaritoneBridge.BuildStats currentStats = BaritoneBridge.buildStats();
-        if (isEffectivelyComplete(currentStats)) {
-            completeBuild("Build complete");
-            return;
-        }
         if (BaritoneBridge.isBuilderPaused()) {
             builderPausedTicks++;
             inactiveTicks = 0;
@@ -431,11 +444,6 @@ public final class AutoBuildController {
 
         inactiveTicks++;
         if (inactiveTicks > 80) {
-            BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
-            if (isEffectivelyComplete(stats)) {
-                completeBuild("Build complete");
-                return;
-            }
             if (refetchGuardTicks == 0) {
                 runAutoDiagnostic("Baritone が待機状態のまま進んでいません", true);
             } else {
@@ -446,10 +454,6 @@ public final class AutoBuildController {
 
     private static boolean handleProgressStall() {
         BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
-        if (isEffectivelyComplete(stats)) {
-            completeBuild("Build complete");
-            return true;
-        }
         if (stats.totalBlocks() <= 0 || stats.remainingBlocks() <= 0) {
             resetProgressWatch();
             return false;
@@ -494,16 +498,6 @@ public final class AutoBuildController {
         progressStallTicks = 0;
         lastRemainingBlocks = -1;
         lastProgressTarget = "";
-    }
-
-    private static boolean isEffectivelyComplete(BaritoneBridge.BuildStats stats) {
-        if (stats.totalBlocks() <= 0) {
-            return false;
-        }
-        if (stats.remainingBlocks() <= 0) {
-            return true;
-        }
-        return isCreativeMode() && stats.remainingBlocks() <= CREATIVE_COMPLETE_REMAINING_TOLERANCE;
     }
 
     private static boolean runAutoDiagnostic(String trigger, boolean allowChestFetch) {
