@@ -92,6 +92,10 @@ public final class AutoBuildController {
         if (diagnosticNoticeTicks > 0) {
             diagnosticNoticeTicks--;
         }
+        if ((isAutoBuildAutomationMode() || mode == Mode.PAUSED) && BaritoneBridge.isClearingAreaActive()) {
+            prepareForExternalClearArea();
+            return;
+        }
         if (mode == Mode.WAITING_FOR_MATERIALS) {
             retryWaitingForMaterials();
             return;
@@ -118,6 +122,22 @@ public final class AutoBuildController {
         status = completeStatus;
         cachedSnapshotAtMs = 0L;
         message(completeStatus, ChatFormatting.GREEN);
+    }
+
+    public static void prepareForExternalClearArea() {
+        closeContainerIfNeeded();
+        MaterialChestProcess.stop("External clear area started");
+        MaterialCraftProcess.stop("External clear area started");
+        MaterialSmeltProcess.stop("External clear area started");
+        mode = Mode.IDLE;
+        pausedFrom = Mode.IDLE;
+        lastWorkMode = WorkMode.CLEAR_AREA;
+        diagnosticAttempts = 0;
+        diagnosticNoticeTicks = 0;
+        materialShortageNotified = false;
+        resetProgressWatch();
+        status = "整地モードに切り替え";
+        cachedSnapshotAtMs = 0L;
     }
 
     public static void startFullAutoBuild() {
