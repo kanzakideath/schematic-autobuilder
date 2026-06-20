@@ -29,6 +29,8 @@ public final class AutoBuildController {
     private static final int CREATIVE_SMALL_REMAINING_STALL_TICKS = 60;
     private static final int CREATIVE_COMMAND_FILL_REMAINING_THRESHOLD = 512;
     private static final int CREATIVE_COMMAND_FILL_BATCH = 64;
+    private static final int MAX_COMPLETION_RECHECKS = 2;
+    private static final int COMPLETION_RECHECK_GUARD_TICKS = 12;
 
     private enum Mode {
         IDLE,
@@ -60,6 +62,7 @@ public final class AutoBuildController {
     private static int diagnosticAttempts;
     private static int diagnosticNoticeTicks;
     private static int progressStallTicks;
+    private static int completionRecheckCount;
     private static int lastRemainingBlocks = -1;
     private static String lastProgressTarget = "";
     private static boolean materialShortageNotified;
@@ -92,8 +95,7 @@ public final class AutoBuildController {
         if (diagnosticNoticeTicks > 0) {
             diagnosticNoticeTicks--;
         }
-        if (baritoneReportedFinished && isAutoBuildAutomationMode()) {
-            completeBuild("Build complete");
+        if (handleReportedCompletion()) {
             return;
         }
         if ((isAutoBuildAutomationMode() || mode == Mode.PAUSED) && BaritoneBridge.isClearingAreaActive()) {
@@ -120,6 +122,7 @@ public final class AutoBuildController {
         mode = Mode.COMPLETE;
         pausedFrom = Mode.IDLE;
         diagnosticAttempts = 0;
+        completionRecheckCount = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
         baritoneReportedFinished = false;
@@ -127,6 +130,40 @@ public final class AutoBuildController {
         status = completeStatus;
         cachedSnapshotAtMs = 0L;
         message(completeStatus, ChatFormatting.GREEN);
+    }
+
+    private static boolean handleReportedCompletion() {
+        if (!baritoneReportedFinished || !isAutoBuildAutomationMode()) {
+            return false;
+        }
+        baritoneReportedFinished = false;
+
+        BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
+        if (stats.remainingBlocks() > 0) {
+            completionRecheckCount = 0;
+            resetProgressWatch();
+            status = "完了確認: 未完了ブロックが残っているため再診断します (" + stats.remainingBlocks() + ")";
+            message(status, ChatFormatting.YELLOW);
+            runAutoDiagnostic("Baritone 完了通知後に未完了ブロックを検出", true);
+            return true;
+        }
+
+        if (completionRecheckCount < MAX_COMPLETION_RECHECKS && restartActiveBuild()) {
+            completionRecheckCount++;
+            refetchGuardTicks = Math.max(refetchGuardTicks, COMPLETION_RECHECK_GUARD_TICKS);
+            builderPausedTicks = 0;
+            inactiveTicks = 0;
+            resetProgressWatch();
+            mode = Mode.BUILDING;
+            lastWorkMode = WorkMode.AUTO_BUILD;
+            status = "完了確認: 設計図を再スキャン中 (" + completionRecheckCount + "/" + MAX_COMPLETION_RECHECKS + ")";
+            message(status, ChatFormatting.AQUA);
+            return true;
+        }
+
+        completionRecheckCount = 0;
+        completeBuild("Build complete");
+        return true;
     }
 
     public static void prepareForExternalClearArea() {
@@ -138,6 +175,7 @@ public final class AutoBuildController {
         pausedFrom = Mode.IDLE;
         lastWorkMode = WorkMode.CLEAR_AREA;
         diagnosticAttempts = 0;
+        completionRecheckCount = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
         baritoneReportedFinished = false;
@@ -177,6 +215,7 @@ public final class AutoBuildController {
         refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
         creativeSupplyTicks = 0;
         diagnosticAttempts = 0;
+        completionRecheckCount = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
         baritoneReportedFinished = false;
@@ -222,6 +261,7 @@ public final class AutoBuildController {
         refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
         creativeSupplyTicks = 0;
         diagnosticAttempts = 0;
+        completionRecheckCount = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
         baritoneReportedFinished = false;
@@ -266,6 +306,7 @@ public final class AutoBuildController {
         refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
         creativeSupplyTicks = 0;
         diagnosticAttempts = 0;
+        completionRecheckCount = 0;
         diagnosticNoticeTicks = 0;
         materialShortageNotified = false;
         baritoneReportedFinished = false;
@@ -298,6 +339,7 @@ public final class AutoBuildController {
         mode = Mode.CANCELLED;
         pausedFrom = Mode.IDLE;
         diagnosticAttempts = 0;
+        completionRecheckCount = 0;
         diagnosticNoticeTicks = 0;
         lastNeededItems = Set.of();
         activeSchematicFileName = "";
