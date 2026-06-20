@@ -3,6 +3,7 @@ package com.kanzakideath.schematicautobuilder;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -24,6 +25,11 @@ public final class AutoBuildController {
     private static final int DIAGNOSTIC_RETRY_TICKS = 40;
     private static final int DIAGNOSTIC_NOTICE_TICKS = 100;
     private static final int MAX_DIAGNOSTIC_RESTARTS = 6;
+    private static final int PROGRESS_STALL_TICKS = 240;
+    private static final int CREATIVE_SMALL_REMAINING_STALL_TICKS = 60;
+    private static final int CREATIVE_COMMAND_FILL_REMAINING_THRESHOLD = 512;
+    private static final int CREATIVE_COMMAND_FILL_BATCH = 64;
+    private static final int CREATIVE_COMPLETE_REMAINING_TOLERANCE = 8;
 
     private enum Mode {
         IDLE,
@@ -54,8 +60,13 @@ public final class AutoBuildController {
     private static int creativeSupplyTicks;
     private static int diagnosticAttempts;
     private static int diagnosticNoticeTicks;
+    private static int progressStallTicks;
+    private static int lastRemainingBlocks = -1;
+    private static String lastProgressTarget = "";
     private static boolean materialShortageNotified;
     private static String status = "Idle";
+    private static String activeSchematicFileName = "";
+    private static BlockPos activeSchematicOrigin;
     private static Set<Item> lastNeededItems = Set.of();
     private static AutoBuilderStatusSnapshot cachedSnapshot = AutoBuilderStatusSnapshot.empty();
     private static long cachedSnapshotAtMs;
@@ -94,6 +105,21 @@ public final class AutoBuildController {
         }
     }
 
+    private static void completeBuild(String completeStatus) {
+        closeContainerIfNeeded();
+        BaritoneBridge.pauseBuilder();
+        BaritoneBridge.cancelPathing();
+        mode = Mode.COMPLETE;
+        pausedFrom = Mode.IDLE;
+        diagnosticAttempts = 0;
+        diagnosticNoticeTicks = 0;
+        materialShortageNotified = false;
+        resetProgressWatch();
+        status = completeStatus;
+        cachedSnapshotAtMs = 0L;
+        message(completeStatus, ChatFormatting.GREEN);
+    }
+
     public static void startFullAutoBuild() {
         if (!BaritoneBridge.isAvailable()) {
             status = "Baritone not found";
@@ -110,8 +136,10 @@ public final class AutoBuildController {
             mode = Mode.IDLE;
             return;
         }
+        activeSchematicFileName = "";
         builderPausedTicks = 0;
         inactiveTicks = 0;
+        resetProgressWatch();
         refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
         creativeSupplyTicks = 0;
         diagnosticAttempts = 0;
@@ -120,12 +148,99 @@ public final class AutoBuildController {
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = "Building from placed schematic";
+        activeSchematicOrigin = null;
         rememberNeededItems();
         int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems, BaritoneBridge.preferredScaffoldItems(lastNeededItems));
         if (supplied > 0) {
             message("\u30af\u30ea\u30a8\u30a4\u30c6\u30a3\u30d6\u30a4\u30f3\u30d9\u30f3\u30c8\u30ea\u304b\u3089\u4e0d\u8db3\u5019\u88dc\u3092\u88dc\u5145\u3057\u307e\u3057\u305f: " + supplied, ChatFormatting.GREEN);
         }
         message("Full auto build started", ChatFormatting.AQUA);
+    }
+
+    public static void startFullAutoBuildFromFile(String fileName) {
+        if (!BaritoneBridge.isAvailable()) {
+            status = "Baritone not found";
+            mode = Mode.ERROR;
+            message(status, ChatFormatting.RED);
+            return;
+        }
+        if (fileName == null || fileName.isBlank()) {
+            status = "設計図ファイル名が空です";
+            mode = Mode.IDLE;
+            message(status, ChatFormatting.YELLOW);
+            return;
+        }
+        MaterialChestProcess.stop("Restarting full auto build from file");
+        BaritoneBridge.cancelPathing();
+        BaritoneBridge.resumeBuilder();
+        if (!BaritoneBridge.startSchematicFileBuild(fileName)) {
+            status = BaritoneBridge.schematicFileStatus();
+            message(status, ChatFormatting.YELLOW);
+            mode = Mode.IDLE;
+            return;
+        }
+        activeSchematicFileName = fileName;
+        activeSchematicOrigin = null;
+        builderPausedTicks = 0;
+        inactiveTicks = 0;
+        resetProgressWatch();
+        refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
+        creativeSupplyTicks = 0;
+        diagnosticAttempts = 0;
+        diagnosticNoticeTicks = 0;
+        materialShortageNotified = false;
+        mode = Mode.BUILDING;
+        lastWorkMode = WorkMode.AUTO_BUILD;
+        status = BaritoneBridge.schematicFileStatus();
+        rememberNeededItems();
+        int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems, BaritoneBridge.preferredScaffoldItems(lastNeededItems));
+        if (supplied > 0) {
+            message("クリエイティブインベントリから不足候補を補充しました: " + supplied, ChatFormatting.GREEN);
+        }
+        message("Full auto build started from file", ChatFormatting.AQUA);
+    }
+
+    public static void startFullAutoBuildFromFileAt(String fileName, int x, int y, int z) {
+        if (!BaritoneBridge.isAvailable()) {
+            status = "Baritone not found";
+            mode = Mode.ERROR;
+            message(status, ChatFormatting.RED);
+            return;
+        }
+        if (fileName == null || fileName.isBlank()) {
+            status = "Schematic file name is empty";
+            mode = Mode.IDLE;
+            message(status, ChatFormatting.YELLOW);
+            return;
+        }
+        MaterialChestProcess.stop("Restarting full auto build from file at origin");
+        BaritoneBridge.cancelPathing();
+        BaritoneBridge.resumeBuilder();
+        if (!BaritoneBridge.startSchematicFileBuildAt(fileName, x, y, z)) {
+            status = BaritoneBridge.schematicFileStatus();
+            message(status, ChatFormatting.YELLOW);
+            mode = Mode.IDLE;
+            return;
+        }
+        activeSchematicFileName = fileName;
+        activeSchematicOrigin = new BlockPos(x, y, z);
+        builderPausedTicks = 0;
+        inactiveTicks = 0;
+        resetProgressWatch();
+        refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
+        creativeSupplyTicks = 0;
+        diagnosticAttempts = 0;
+        diagnosticNoticeTicks = 0;
+        materialShortageNotified = false;
+        mode = Mode.BUILDING;
+        lastWorkMode = WorkMode.AUTO_BUILD;
+        status = BaritoneBridge.schematicFileStatus();
+        rememberNeededItems();
+        int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems, BaritoneBridge.preferredScaffoldItems(lastNeededItems));
+        if (supplied > 0) {
+            message("Creative inventory supplied candidate materials: " + supplied, ChatFormatting.GREEN);
+        }
+        message("Full auto build started from file @ " + x + "," + y + "," + z, ChatFormatting.AQUA);
     }
 
     public static void startOrResumeAutoBuild() {
@@ -148,6 +263,8 @@ public final class AutoBuildController {
         diagnosticAttempts = 0;
         diagnosticNoticeTicks = 0;
         lastNeededItems = Set.of();
+        activeSchematicFileName = "";
+        activeSchematicOrigin = null;
         status = "Cancelled";
         cachedSnapshotAtMs = 0L;
         message("Auto builder stopped", ChatFormatting.YELLOW);
@@ -259,6 +376,11 @@ public final class AutoBuildController {
     }
 
     private static void monitorBuilder() {
+        BaritoneBridge.BuildStats currentStats = BaritoneBridge.buildStats();
+        if (isEffectivelyComplete(currentStats)) {
+            completeBuild("Build complete");
+            return;
+        }
         if (BaritoneBridge.isBuilderPaused()) {
             builderPausedTicks++;
             inactiveTicks = 0;
@@ -280,6 +402,9 @@ public final class AutoBuildController {
         if (BaritoneBridge.isBuilderActive()) {
             inactiveTicks = 0;
             diagnosticAttempts = 0;
+            if (handleProgressStall()) {
+                return;
+            }
             status = "Building";
             return;
         }
@@ -287,10 +412,8 @@ public final class AutoBuildController {
         inactiveTicks++;
         if (inactiveTicks > 80) {
             BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
-            if (stats.totalBlocks() > 0 && stats.remainingBlocks() <= 0) {
-                mode = Mode.COMPLETE;
-                status = "Build complete";
-                message(status, ChatFormatting.GREEN);
+            if (isEffectivelyComplete(stats)) {
+                completeBuild("Build complete");
                 return;
             }
             if (refetchGuardTicks == 0) {
@@ -299,6 +422,68 @@ public final class AutoBuildController {
                 status = "自動診断待機中: Baritone idle";
             }
         }
+    }
+
+    private static boolean handleProgressStall() {
+        BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
+        if (isEffectivelyComplete(stats)) {
+            completeBuild("Build complete");
+            return true;
+        }
+        if (stats.totalBlocks() <= 0 || stats.remainingBlocks() <= 0) {
+            resetProgressWatch();
+            return false;
+        }
+        String target = stats.target() == null ? "" : stats.target();
+        if (stats.remainingBlocks() == lastRemainingBlocks) {
+            progressStallTicks++;
+        } else {
+            lastRemainingBlocks = stats.remainingBlocks();
+            lastProgressTarget = target;
+            progressStallTicks = 0;
+            return false;
+        }
+        lastProgressTarget = target;
+        int stallThreshold = isCreativeMode() && stats.remainingBlocks() <= CREATIVE_COMMAND_FILL_REMAINING_THRESHOLD
+                ? CREATIVE_SMALL_REMAINING_STALL_TICKS
+                : PROGRESS_STALL_TICKS;
+        if (progressStallTicks < stallThreshold || refetchGuardTicks > 0) {
+            return false;
+        }
+        progressStallTicks = 0;
+        rememberNeededItems();
+        if (tryCreativeCommandFill(stats.remainingBlocks(), "progress stalled at " + stats.remainingBlocks() + " block(s)")) {
+            return true;
+        }
+        int deferred = BaritoneBridge.deferCurrentBuildTargets("progress stalled at " + stats.remainingBlocks() + " block(s)");
+        if (deferred > 0) {
+            refetchGuardTicks = DIAGNOSTIC_RETRY_TICKS;
+            BaritoneBridge.cancelPathing();
+            BaritoneBridge.resumeBuilder();
+            status = "自動診断: 到達困難な候補を後回しにして続行します";
+            message(status + " (" + deferred + ")", ChatFormatting.AQUA);
+            return true;
+        }
+        if (runAutoDiagnostic("進捗が止まっています", true)) {
+            return true;
+        }
+        return false;
+    }
+
+    private static void resetProgressWatch() {
+        progressStallTicks = 0;
+        lastRemainingBlocks = -1;
+        lastProgressTarget = "";
+    }
+
+    private static boolean isEffectivelyComplete(BaritoneBridge.BuildStats stats) {
+        if (stats.totalBlocks() <= 0) {
+            return false;
+        }
+        if (stats.remainingBlocks() <= 0) {
+            return true;
+        }
+        return isCreativeMode() && stats.remainingBlocks() <= CREATIVE_COMPLETE_REMAINING_TOLERANCE;
     }
 
     private static boolean runAutoDiagnostic(String trigger, boolean allowChestFetch) {
@@ -312,12 +497,28 @@ public final class AutoBuildController {
         if (supplyCreativeAndResume()) {
             return true;
         }
-        if (allowChestFetch && AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources() && !MaterialChestProcess.isRunning()) {
+        BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
+        if (tryCreativeCommandFill(stats.remainingBlocks(), "creative diagnostic")) {
+            return true;
+        }
+        if (isCreativeMode()) {
+            int deferred = BaritoneBridge.deferCurrentBuildTargets("creative diagnostic");
+            if (deferred > 0) {
+                refetchGuardTicks = DIAGNOSTIC_RETRY_TICKS;
+                BaritoneBridge.cancelPathing();
+                BaritoneBridge.resumeBuilder();
+                mode = Mode.BUILDING;
+                status = "Creative診断: 到達困難な候補を後回しにして続行します";
+                message(status + " (" + deferred + ")", ChatFormatting.AQUA);
+                return true;
+            }
+        }
+        if (!isCreativeMode() && allowChestFetch && AutoBuilderConfig.autoFetchMaterials() && MaterialChestProcess.hasMaterialSources() && !MaterialChestProcess.isRunning()) {
             materialShortageNotified = false;
             startMaterialFetchForBuild("自動診断: 素材チェストから補充します");
             return true;
         }
-        if (tryMaterialCreationForBuild("自動診断: 手持ち素材から作れる分を作成します")) {
+        if (!isCreativeMode() && tryMaterialCreationForBuild("自動診断: 手持ち素材から作れる分を作成します")) {
             return true;
         }
         if (AutoBuilderConfig.startBuildAfterFetch() && diagnosticAttempts < MAX_DIAGNOSTIC_RESTARTS) {
@@ -334,6 +535,24 @@ public final class AutoBuildController {
             message(status, ChatFormatting.YELLOW);
         }
         return false;
+    }
+
+    private static boolean tryCreativeCommandFill(int remainingBlocks, String reason) {
+        if (!isCreativeMode() || remainingBlocks <= 0 || remainingBlocks > CREATIVE_COMMAND_FILL_REMAINING_THRESHOLD) {
+            return false;
+        }
+        int sent = BaritoneBridge.creativeCommandSetRemaining(CREATIVE_COMMAND_FILL_BATCH);
+        if (sent <= 0) {
+            return false;
+        }
+        refetchGuardTicks = CREATIVE_REFETCH_GUARD_TICKS;
+        BaritoneBridge.cancelPathing();
+        BaritoneBridge.resumeBuilder();
+        mode = Mode.BUILDING;
+        resetProgressWatch();
+        status = "Creative補完: 未完了ブロックを直接反映しました (" + sent + ")";
+        message(status + " / " + reason, ChatFormatting.GREEN);
+        return true;
     }
 
     private static void startMaterialFetchForBuild(String reason) {
@@ -433,7 +652,7 @@ public final class AutoBuildController {
         BaritoneBridge.cancelPathing();
         BaritoneBridge.resumeBuilder();
         materialShortageNotified = false;
-        if (!BaritoneBridge.startPlacedSchematicBuild()) {
+        if (!restartActiveBuild()) {
             mode = Mode.WAITING_FOR_MATERIALS;
             status = "\u8a2d\u8a08\u56f3\u304c\u898b\u3064\u304b\u3089\u306a\u3044\u305f\u3081\u518d\u958b\u3067\u304d\u307e\u305b\u3093";
             message(status, ChatFormatting.YELLOW);
@@ -441,10 +660,21 @@ public final class AutoBuildController {
         }
         builderPausedTicks = 0;
         inactiveTicks = 0;
+        resetProgressWatch();
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = resumeStatus;
         message(status, ChatFormatting.GREEN);
+    }
+
+    private static boolean restartActiveBuild() {
+        if (activeSchematicFileName != null && !activeSchematicFileName.isBlank()) {
+            if (activeSchematicOrigin != null) {
+                return BaritoneBridge.startSchematicFileBuildAt(activeSchematicFileName, activeSchematicOrigin.getX(), activeSchematicOrigin.getY(), activeSchematicOrigin.getZ());
+            }
+            return BaritoneBridge.startSchematicFileBuild(activeSchematicFileName);
+        }
+        return BaritoneBridge.startPlacedSchematicBuild();
     }
 
     private static void retryWaitingForMaterials() {
@@ -566,14 +796,17 @@ public final class AutoBuildController {
         BaritoneBridge.resumeBuilder();
         if (resumeFrom == Mode.BUILDING || BaritoneBridge.isBuilderActive()) {
             if (!BaritoneBridge.isBuilderActive()) {
-                if (!BaritoneBridge.startPlacedSchematicBuild()) {
+                if (!restartActiveBuild()) {
                     mode = Mode.IDLE;
-                    status = BaritoneBridge.openSchematicStatus();
+                    status = activeSchematicFileName == null || activeSchematicFileName.isBlank()
+                            ? BaritoneBridge.openSchematicStatus()
+                            : BaritoneBridge.schematicFileStatus();
                     message(status, ChatFormatting.YELLOW);
                     return;
                 }
             }
             materialShortageNotified = false;
+            resetProgressWatch();
             mode = Mode.BUILDING;
             lastWorkMode = WorkMode.AUTO_BUILD;
             status = "Resumed build";
@@ -583,6 +816,7 @@ public final class AutoBuildController {
         mode = Mode.IDLE;
         status = "Idle";
         lastNeededItems = Set.of();
+        activeSchematicFileName = "";
         message("Auto builder resumed", ChatFormatting.GREEN);
     }
 

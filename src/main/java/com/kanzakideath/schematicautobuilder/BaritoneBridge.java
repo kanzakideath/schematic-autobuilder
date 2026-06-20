@@ -13,7 +13,9 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 
+import java.io.File;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -27,8 +29,11 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 
 public final class BaritoneBridge {
+    private static String lastSchematicFileStatus = "";
+
     private static final List<String> WOOD_SUFFIXES = List.of(
             "planks",
             "stairs",
@@ -178,6 +183,124 @@ public final class BaritoneBridge {
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             return BuildStats.empty();
         }
+    }
+
+    public static int creativeCommandSetRemaining(int maxCommands) {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null || minecraft.level == null || minecraft.getConnection() == null || !minecraft.player.isCreative()) {
+            return 0;
+        }
+        Object builder = builderProcess();
+        if (builder == null || maxCommands <= 0) {
+            return 0;
+        }
+        try {
+            Object schematic = privateField(builder, "schematic");
+            Object incorrect = privateField(builder, "incorrectPositions");
+            Object originObject = privateField(builder, "origin");
+            Object approxObject = privateField(builder, "approxPlaceable");
+            if (schematic == null || !(originObject instanceof Vec3i origin) || !(incorrect instanceof Iterable<?> iterable)) {
+                return 0;
+            }
+            List<?> approx = approxObject instanceof List<?> list ? list : Collections.emptyList();
+            Method desiredState = schematic.getClass().getMethod("desiredState", int.class, int.class, int.class, BlockState.class, List.class);
+            desiredState.setAccessible(true);
+            int sent = 0;
+            for (Object raw : iterable) {
+                if (!(raw instanceof BlockPos pos)) {
+                    continue;
+                }
+                if (!minecraft.level.hasChunkAt(pos)) {
+                    continue;
+                }
+                BlockState current = minecraft.level.getBlockState(pos);
+                Object desiredObject = desiredState.invoke(schematic, pos.getX() - origin.getX(), pos.getY() - origin.getY(), pos.getZ() - origin.getZ(), current, approx);
+                if (!(desiredObject instanceof BlockState desired)) {
+                    continue;
+                }
+                if (current == desired || equivalentForCreativeCommand(current, desired)) {
+                    continue;
+                }
+                String blockCommand = blockStateCommand(desired);
+                if (blockCommand.isBlank()) {
+                    continue;
+                }
+                minecraft.getConnection().sendCommand("setblock " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + blockCommand + " replace");
+                sent++;
+                if (sent >= maxCommands) {
+                    break;
+                }
+            }
+            return sent;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return 0;
+        }
+    }
+
+    private static String blockStateCommand(BlockState state) {
+        if (state == null) {
+            return "";
+        }
+        Identifier id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        if (id == null) {
+            return "";
+        }
+        StringBuilder command = new StringBuilder(id.toString());
+        List<Property.Value<?>> values = state.getValues().toList();
+        if (!values.isEmpty()) {
+            StringJoiner joiner = new StringJoiner(",");
+            for (Property.Value<?> value : values) {
+                if (isTransientStateProperty(value.property().getName())) {
+                    continue;
+                }
+                joiner.add(value.property().getName() + "=" + value.value());
+            }
+            String properties = joiner.toString();
+            if (!properties.isEmpty()) {
+                command.append('[').append(properties).append(']');
+            }
+        }
+        return command.toString();
+    }
+
+    private static boolean equivalentForCreativeCommand(BlockState current, BlockState desired) {
+        if (current == null || desired == null) {
+            return current == desired;
+        }
+        if (current.equals(desired)) {
+            return true;
+        }
+        if (current.getBlock() != desired.getBlock()) {
+            return false;
+        }
+        Map<String, Comparable<?>> currentProperties = stateProperties(current);
+        for (Property.Value<?> value : desired.getValues().toList()) {
+            String name = value.property().getName();
+            if (isTransientStateProperty(name)) {
+                continue;
+            }
+            Comparable<?> currentValue = currentProperties.get(name);
+            if (currentValue != null && !currentValue.equals(value.value())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static Map<String, Comparable<?>> stateProperties(BlockState state) {
+        Map<String, Comparable<?>> result = new HashMap<>();
+        for (Property.Value<?> value : state.getValues().toList()) {
+            result.put(value.property().getName(), value.value());
+        }
+        return result;
+    }
+
+    private static boolean isTransientStateProperty(String name) {
+        return "occupied".equals(name)
+                || "enabled".equals(name)
+                || "powered".equals(name)
+                || "triggered".equals(name)
+                || "lit".equals(name);
     }
 
     public static boolean startPlacedSchematicBuild() {
@@ -331,6 +454,19 @@ public final class BaritoneBridge {
         }
     }
 
+    public static int deferCurrentBuildTargets(String reason) {
+        Object builder = builderProcess();
+        if (builder == null) {
+            return 0;
+        }
+        try {
+            Object result = builder.getClass().getMethod("deferCurrentTargets", String.class).invoke(builder, reason);
+            return result instanceof Number number ? number.intValue() : 0;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return 0;
+        }
+    }
+
     public static List<BlockPos> clearAreaStorageChests() {
         Object settings = settings();
         if (settings == null) {
@@ -464,6 +600,47 @@ public final class BaritoneBridge {
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             return Set.of();
         }
+    }
+
+    public static boolean startSchematicFileBuild(String fileName) {
+        return startSchematicFileBuild(fileName, playerFeet());
+    }
+
+    public static boolean startSchematicFileBuildAt(String fileName, int x, int y, int z) {
+        return startSchematicFileBuild(fileName, new Vec3i(x, y, z));
+    }
+
+    private static boolean startSchematicFileBuild(String fileName, Vec3i buildOrigin) {
+        Object builder = builderProcess();
+        if (builder == null) {
+            lastSchematicFileStatus = "Baritone builder process not found";
+            return false;
+        }
+        File file = resolveSchematicFile(fileName);
+        if (!file.exists()) {
+            lastSchematicFileStatus = "Schematic file not found: " + file.getAbsolutePath();
+            return false;
+        }
+        configureForExactSchematicBuild();
+        try {
+            Method build = builder.getClass().getMethod("build", String.class, File.class, Vec3i.class);
+            Vec3i origin = buildOrigin == null ? playerFeet() : buildOrigin;
+            Object result = build.invoke(builder, file.getName(), file, origin);
+            boolean started = !(result instanceof Boolean) || (Boolean) result;
+            lastSchematicFileStatus = started
+                    ? "Schematic file build started: " + file.getName() + " @ " + origin.getX() + "," + origin.getY() + "," + origin.getZ()
+                    : "Couldn't load schematic file: " + file.getName();
+            return started;
+        } catch (ReflectiveOperationException | RuntimeException ex) {
+            lastSchematicFileStatus = "Schematic file build failed: " + ex.getClass().getSimpleName();
+            return false;
+        }
+    }
+
+    public static String schematicFileStatus() {
+        return lastSchematicFileStatus == null || lastSchematicFileStatus.isBlank()
+                ? "No schematic file build requested"
+                : lastSchematicFileStatus;
     }
 
     private static Set<Item> currentMissingBuildItems(Object builder) {
@@ -988,6 +1165,45 @@ public final class BaritoneBridge {
         } catch (ReflectiveOperationException ignored) {
             return null;
         }
+    }
+
+    private static Vec3i playerFeet() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.player == null) {
+            return new BlockPos(0, 0, 0);
+        }
+        return minecraft.player.blockPosition();
+    }
+
+    private static File resolveSchematicFile(String fileName) {
+        String normalized = stripWrappingQuotes(fileName == null ? "" : fileName.trim());
+        File file = new File(normalized);
+        if (!file.isAbsolute()) {
+            file = new File(new File(Minecraft.getInstance().gameDirectory, "schematics"), normalized);
+        }
+        if (!file.exists() && !hasExtension(file.getName())) {
+            File litematic = new File(file.getAbsolutePath() + ".litematic");
+            if (litematic.exists()) {
+                return litematic;
+            }
+            File schematic = new File(file.getAbsolutePath() + ".schematic");
+            if (schematic.exists()) {
+                return schematic;
+            }
+        }
+        return file;
+    }
+
+    private static String stripWrappingQuotes(String value) {
+        if (value.length() >= 2 && ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'")))) {
+            return value.substring(1, value.length() - 1);
+        }
+        return value;
+    }
+
+    private static boolean hasExtension(String name) {
+        int dot = name.lastIndexOf('.');
+        return dot > 0 && dot < name.length() - 1;
     }
 
     private static Object primaryBaritone() {

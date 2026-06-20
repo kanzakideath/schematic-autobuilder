@@ -9,6 +9,7 @@ import org.lwjgl.glfw.GLFW;
 public final class AutoBuilderKeys {
 
     private static final int KEY_MIGRATION_UNBOUND_DEFAULTS = 1;
+    private static final int SCREEN_CLOSE_INPUT_COOLDOWN_TICKS = 5;
 
     private static final KeyMapping OPEN_MENU = new KeyMapping(
             "key.schematicautobuilder.open_menu",
@@ -60,6 +61,7 @@ public final class AutoBuilderKeys {
             TOGGLE_HUD_DETAIL,
             TOGGLE_MATERIAL_CHEST_REGISTRATION
     };
+    private static int screenCloseInputCooldown;
 
     private AutoBuilderKeys() {}
 
@@ -69,7 +71,13 @@ public final class AutoBuilderKeys {
 
     public static void onClientTick(Minecraft minecraft) {
         migrateOldDefaultKeys(minecraft);
-        boolean gameInputAllowed = minecraft.gui.screen() == null;
+        boolean screenOpen = minecraft.gui.screen() != null;
+        if (screenOpen) {
+            screenCloseInputCooldown = SCREEN_CLOSE_INPUT_COOLDOWN_TICKS;
+        } else if (screenCloseInputCooldown > 0) {
+            screenCloseInputCooldown--;
+        }
+        boolean gameInputAllowed = canHandleGameplayKey(minecraft);
         while (OPEN_MENU.consumeClick()) {
             if (gameInputAllowed) {
                 openMenu(minecraft);
@@ -110,7 +118,7 @@ public final class AutoBuilderKeys {
         if (action != GLFW.GLFW_PRESS || minecraft == null || event == null) {
             return false;
         }
-        if (minecraft.gui.screen() != null) {
+        if (!canHandleGameplayKey(minecraft)) {
             return false;
         }
         if (OPEN_MENU.matches(event)) {
@@ -172,5 +180,9 @@ public final class AutoBuilderKeys {
         if (!(minecraft.gui.screen() instanceof AutoBuilderScreen)) {
             minecraft.setScreenAndShow(new AutoBuilderScreen());
         }
+    }
+
+    private static boolean canHandleGameplayKey(Minecraft minecraft) {
+        return minecraft.gui.screen() == null && screenCloseInputCooldown <= 0;
     }
 }
