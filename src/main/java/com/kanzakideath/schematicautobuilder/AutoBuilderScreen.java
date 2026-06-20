@@ -9,22 +9,27 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.Locale;
 
 public final class AutoBuilderScreen extends Screen {
 
-    private static final int PANEL = 0xDD061015;
-    private static final int CYAN = 0xFF19EAF2;
-    private static final int GREEN = 0xFF72FFAA;
-    private static final int ORANGE = 0xFFFFB545;
-    private static final int RED = 0xFFFF5548;
-    private static final int TEXT = 0xFFEAFDFF;
-    private static final int DIM = 0xFF8DB9C1;
-    private static final int BLOCK = 0x66000000;
+    private static final int BACKGROUND = 0xD8101218;
+    private static final int PANEL = 0xF0222630;
+    private static final int PANEL_2 = 0xF02C323D;
+    private static final int BORDER = 0xFF5E6A7A;
+    private static final int TEXT = 0xFFFFFFFF;
+    private static final int DIM = 0xFFB9C2CE;
+    private static final int GREEN = 0xFF2ECC71;
+    private static final int YELLOW = 0xFFFFC857;
+    private static final int RED = 0xFFFF5A5F;
+    private static final int BLUE = 0xFF4DA3FF;
+    private static final int CYAN = 0xFF54D6E8;
+    private static final int PURPLE = 0xFFC084FC;
 
     private Page page = Page.MAIN;
 
     public AutoBuilderScreen() {
-        super(Component.literal("\u8a2d\u8a08\u56f3 \u81ea\u52d5\u5efa\u7bc9\uff08\u30d9\u30fc\u30bf\u7248\uff09"));
+        super(Component.literal("AutoBuilder 設定"));
     }
 
     @Override
@@ -34,39 +39,61 @@ public final class AutoBuilderScreen extends Screen {
 
     @Override
     protected void init() {
-        switch (page) {
-            case SETTINGS -> initSettings();
-            case CHESTS -> initChests();
-            case MATERIALS -> initMaterials();
-            default -> initMain();
-        }
-    }
-
-    private void initMain() {
-        int panelWidth = Math.min(680, this.width - 36);
+        int panelWidth = panelWidth();
         int x = (this.width - panelWidth) / 2;
         int y = panelY();
-        int full = panelWidth - 48;
-        int half = (full - 8) / 2;
-        int third = (full - 16) / 3;
-        int row = 24;
-        int gap = 6;
-        int by = y + 134;
+        int contentX = x + 18;
+        int contentY = y + 82;
+        int contentWidth = panelWidth - 36;
 
-        addRenderableWidget(button(x + 24, by, half, "\u81ea\u52d5\u5efa\u7bc9\u3092\u958b\u59cb\uff08\u30d9\u30fc\u30bf\uff09", () -> {
-            AutoBuildController.startFullAutoBuild();
+        addPageTabs(contentX, y + 48, contentWidth);
+
+        switch (page) {
+            case SETTINGS -> initSettings(contentX, contentY, contentWidth);
+            case CHESTS -> initChests(contentX, contentY, contentWidth);
+            case MATERIALS -> initMaterials(contentX, contentY, contentWidth);
+            default -> initMain(contentX, contentY, contentWidth);
+        }
+
+        int footerY = y + panelHeight() - 34;
+        int buttonWidth = (contentWidth - 18) / 4;
+        addRenderableWidget(button(contentX, footerY, buttonWidth, "戻る", this::backToMain));
+        addRenderableWidget(button(contentX + (buttonWidth + 6), footerY, buttonWidth, "更新確認", () -> {
+            AutoUpdater.checkNow();
+            page = Page.MAIN;
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, "\u6574\u5730\u30e2\u30fc\u30c9\u3092\u958b\u304f", this::openBaritoneClearMode));
-        by += row + gap;
+        addRenderableWidget(button(contentX + (buttonWidth + 6) * 2, footerY, buttonWidth, "全停止", AutoBuildController::cancelAutomation));
+        addRenderableWidget(button(contentX + (buttonWidth + 6) * 3, footerY, buttonWidth, "閉じる", () -> {
+            if (this.minecraft != null) {
+                this.minecraft.setScreenAndShow(null);
+            }
+        }));
+    }
 
-        addRenderableWidget(button(x + 24, by, full, pauseLabel(), () -> {
+    private void initMain(int x, int y, int width) {
+        int half = (width - 8) / 2;
+        int row = 25;
+        int gap = 7;
+
+        addRenderableWidget(button(x, y, half, "自動建築 開始/再開（ベータ）", () -> {
+            AutoBuildController.startOrResumeAutoBuild();
+            refresh();
+        }));
+        addRenderableWidget(button(x + half + 8, y, half, "整地モードを開く", this::openBaritoneClearMode));
+        y += row + gap;
+
+        addRenderableWidget(button(x, y, half, pauseLabel(), () -> {
             AutoBuildController.togglePause();
             refresh();
         }));
-        by += row + gap + 20;
+        addRenderableWidget(button(x + half + 8, y, half, "素材を今すぐ補充", () -> {
+            AutoBuildController.fetchMaterialsOnly();
+            refresh();
+        }));
+        y += row + gap + 10;
 
-        addRenderableWidget(button(x + 24, by, half, materialChestRegisterLabel(), () -> {
+        addRenderableWidget(button(x, y, half, materialChestRegisterLabel(), () -> {
             Minecraft minecraft = Minecraft.getInstance();
             if (MaterialChestProcess.isRegisteringChests()) {
                 MaterialChestProcess.stopChestRegistration();
@@ -77,318 +104,341 @@ public final class AutoBuilderScreen extends Screen {
             if (minecraft != null) {
                 minecraft.setScreenAndShow(null);
             }
-            refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, "\u4eca\u3059\u3050\u7d20\u6750\u88dc\u5145", () -> {
-            AutoBuildController.fetchMaterialsOnly();
-            refresh();
-        }));
-        by += row + gap;
-
-        addRenderableWidget(button(x + 24, by, half, autoFetchLabel(), () -> {
-            AutoBuilderConfig.toggleAutoFetchMaterials();
-            refresh();
-        }));
-        addRenderableWidget(button(x + 32 + half, by, half, autoResumeLabel(), () -> {
-            AutoBuilderConfig.toggleStartBuildAfterFetch();
-            refresh();
-        }));
-        by += row + gap;
-
-        addRenderableWidget(button(x + 24, by, full, autoCraftLabel(), () -> {
-            AutoBuilderConfig.toggleAutoCraftMaterials();
-            refresh();
-        }));
-        by += row + gap;
-
-        addRenderableWidget(button(x + 24, by, half, topDownLabel(), () -> {
-            AutoBuilderConfig.toggleTopDownBuild();
-            refresh();
-        }));
-        addRenderableWidget(button(x + 32 + half, by, half, substituteLabel(), () -> {
-            AutoBuilderConfig.toggleAutoSubstituteMaterials();
-            refresh();
-        }));
-        by += row + gap;
-
-        addRenderableWidget(button(x + 24, by, third, "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u4e00\u89a7", () -> {
+        addRenderableWidget(button(x + half + 8, y, half, "素材チェスト一覧", () -> {
             page = Page.CHESTS;
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + third, by, third, "\u5fc5\u8981/\u4e0d\u8db3\u7d20\u6750", () -> {
+        y += row + gap;
+
+        addRenderableWidget(button(x, y, half, "必要/不足素材", () -> {
             page = Page.MATERIALS;
             refresh();
         }));
-        addRenderableWidget(button(x + 40 + third * 2, by, third, "HUD\u8a2d\u5b9a", () -> {
+        addRenderableWidget(button(x + half + 8, y, half, "詳細設定", () -> {
             page = Page.SETTINGS;
             refresh();
         }));
-        by += row + gap + 20;
+        y += row + gap + 10;
 
-        addRenderableWidget(button(x + 24, by, half, "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u767b\u9332\u3092\u5168\u524a\u9664", () -> {
+        addRenderableWidget(button(x, y, half, autoFetchLabel(), () -> {
+            AutoBuilderConfig.toggleAutoFetchMaterials();
+            refresh();
+        }));
+        addRenderableWidget(button(x + half + 8, y, half, autoResumeLabel(), () -> {
+            AutoBuilderConfig.toggleStartBuildAfterFetch();
+            refresh();
+        }));
+        y += row + gap;
+
+        addRenderableWidget(button(x, y, half, autoCraftLabel(), () -> {
+            AutoBuilderConfig.toggleAutoCraftMaterials();
+            refresh();
+        }));
+        addRenderableWidget(button(x + half + 8, y, half, substituteLabel(), () -> {
+            AutoBuilderConfig.toggleAutoSubstituteMaterials();
+            refresh();
+        }));
+        y += row + gap;
+
+        addRenderableWidget(button(x, y, half, topDownLabel(), () -> {
+            AutoBuilderConfig.toggleTopDownBuild();
+            refresh();
+        }));
+        addRenderableWidget(button(x + half + 8, y, half, "素材チェスト全削除", () -> {
             AutoBuilderConfig.clearMaterialChests();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, "\u66f4\u65b0\u3092\u78ba\u8a8d", () -> {
-            AutoUpdater.checkNow();
-            refresh();
-        }));
-        by += row + gap;
-
-        addRenderableWidget(button(x + 24, by, full, "\u9589\u3058\u308b", () -> {
-            if (this.minecraft != null) {
-                this.minecraft.setScreenAndShow(null);
-            }
-        }));
     }
 
-    private void initSettings() {
-        int panelWidth = Math.min(680, this.width - 36);
-        int x = (this.width - panelWidth) / 2;
-        int y = panelY();
-        int full = panelWidth - 48;
-        int half = (full - 8) / 2;
-        int third = (full - 16) / 3;
-        int quarter = (full - 24) / 4;
-        int row = 24;
-        int gap = 6;
-        int by = y + 134;
+    private void initSettings(int x, int y, int width) {
+        int third = (width - 16) / 3;
+        int half = (width - 8) / 2;
+        int row = 25;
+        int gap = 7;
 
-        addRenderableWidget(button(x + 24, by, half, hudEnabledLabel(), () -> {
+        addRenderableWidget(button(x, y, half, hudEnabledLabel(), () -> {
             AutoBuilderConfig.toggleHudEnabled();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, hudModeLabel(), () -> {
+        addRenderableWidget(button(x + half + 8, y, half, hudModeLabel(), () -> {
             AutoBuilderConfig.toggleHudDetailed();
             refresh();
         }));
-        by += row + gap;
+        y += row + gap;
 
-        addRenderableWidget(button(x + 24, by, third, hudPositionLabel(), () -> {
+        addRenderableWidget(button(x, y, third, hudPositionLabel(), () -> {
             AutoBuilderConfig.cycleHudPosition();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + third, by, third, "HUD X -4: " + AutoBuilderConfig.hudXOffset(), () -> {
+        addRenderableWidget(button(x + third + 8, y, third, "HUD X -4: " + AutoBuilderConfig.hudXOffset(), () -> {
             AutoBuilderConfig.adjustHudXOffset(-4);
             refresh();
         }));
-        addRenderableWidget(button(x + 40 + third * 2, by, third, "HUD X +4: " + AutoBuilderConfig.hudXOffset(), () -> {
+        addRenderableWidget(button(x + (third + 8) * 2, y, third, "HUD X +4: " + AutoBuilderConfig.hudXOffset(), () -> {
             AutoBuilderConfig.adjustHudXOffset(4);
             refresh();
         }));
-        by += row + gap;
+        y += row + gap;
 
-        addRenderableWidget(button(x + 24, by, third, "HUD Y -4: " + AutoBuilderConfig.hudYOffset(), () -> {
+        addRenderableWidget(button(x, y, third, "HUD Y -4: " + AutoBuilderConfig.hudYOffset(), () -> {
             AutoBuilderConfig.adjustHudYOffset(-4);
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + third, by, third, "HUD Y +4: " + AutoBuilderConfig.hudYOffset(), () -> {
+        addRenderableWidget(button(x + third + 8, y, third, "HUD Y +4: " + AutoBuilderConfig.hudYOffset(), () -> {
             AutoBuilderConfig.adjustHudYOffset(4);
             refresh();
         }));
-        addRenderableWidget(button(x + 40 + third * 2, by, third, "透明度: " + AutoBuilderConfig.hudOpacity(), () -> {
+        addRenderableWidget(button(x + (third + 8) * 2, y, third, "背景濃さ: " + AutoBuilderConfig.hudOpacity(), () -> {
             AutoBuilderConfig.adjustHudOpacity(16);
             refresh();
         }));
-        by += row + gap;
+        y += row + gap + 10;
 
-        addRenderableWidget(button(x + 24, by, quarter, "透明度 -16", () -> {
-            AutoBuilderConfig.adjustHudOpacity(-16);
-            refresh();
-        }));
-        addRenderableWidget(button(x + 32 + quarter, by, quarter, "透明度 +16", () -> {
-            AutoBuilderConfig.adjustHudOpacity(16);
-            refresh();
-        }));
-        addRenderableWidget(button(x + 40 + quarter * 2, by, quarter, "文字 -10%", () -> {
+        addRenderableWidget(button(x, y, third, "文字 -10%", () -> {
             AutoBuilderConfig.adjustHudTextScalePercent(-10);
             refresh();
         }));
-        addRenderableWidget(button(x + 48 + quarter * 3, by, quarter, "文字 +10%: " + AutoBuilderConfig.hudTextScalePercent() + "%", () -> {
+        addRenderableWidget(button(x + third + 8, y, third, "文字 +10%: " + AutoBuilderConfig.hudTextScalePercent() + "%", () -> {
             AutoBuilderConfig.adjustHudTextScalePercent(10);
             refresh();
         }));
-        by += row + gap + 10;
-
-        addRenderableWidget(button(x + 24, by, half, "素材不足表示: " + onOff(AutoBuilderConfig.hudShowMissingMaterials()), () -> {
-            AutoBuilderConfig.toggleHudShowMissingMaterials();
-            refresh();
-        }));
-        addRenderableWidget(button(x + 32 + half, by, half, "Baritone表示: " + onOff(AutoBuilderConfig.hudShowBaritoneStatus()), () -> {
-            AutoBuilderConfig.toggleHudShowBaritoneStatus();
-            refresh();
-        }));
-        by += row + gap;
-
-        addRenderableWidget(button(x + 24, by, third, "ターゲット: " + onOff(AutoBuilderConfig.hudShowTarget()), () -> {
-            AutoBuilderConfig.toggleHudShowTarget();
-            refresh();
-        }));
-        addRenderableWidget(button(x + 32 + third, by, third, "ETA: " + onOff(AutoBuilderConfig.hudShowEta()), () -> {
-            AutoBuilderConfig.toggleHudShowEta();
-            refresh();
-        }));
-        addRenderableWidget(button(x + 40 + third * 2, by, third, "DEBUG: " + onOff(AutoBuilderConfig.hudShowDebug()), () -> {
-            AutoBuilderConfig.toggleHudShowDebug();
-            refresh();
-        }));
-        by += row + gap + 10;
-
-        addRenderableWidget(button(x + 24, by, third, safetyModeLabel(), () -> {
+        addRenderableWidget(button(x + (third + 8) * 2, y, third, safetyModeLabel(), () -> {
             AutoBuilderConfig.cycleSafetyMode();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + third, by, third, "ドライラン: " + onOff(AutoBuilderConfig.dryRunMode()), () -> {
-            AutoBuilderConfig.toggleDryRunMode();
-            refresh();
-        }));
-        addRenderableWidget(button(x + 40 + third * 2, by, third, "HUDクリック表示: " + onOff(AutoBuilderConfig.hudClickControls()), () -> {
-            AutoBuilderConfig.toggleHudClickControls();
-            refresh();
-        }));
-        by += row + gap;
+        y += row + gap;
 
-        addRenderableWidget(button(x + 24, by, third, "診断ログ: " + onOff(AutoBuilderConfig.diagnosisLogEnabled()), () -> {
+        addRenderableWidget(button(x, y, half, "素材不足表示: " + onOff(AutoBuilderConfig.hudShowMissingMaterials()), () -> {
+            AutoBuilderConfig.toggleHudShowMissingMaterials();
+            refresh();
+        }));
+        addRenderableWidget(button(x + half + 8, y, half, "Baritone表示: " + onOff(AutoBuilderConfig.hudShowBaritoneStatus()), () -> {
+            AutoBuilderConfig.toggleHudShowBaritoneStatus();
+            refresh();
+        }));
+        y += row + gap;
+
+        addRenderableWidget(button(x, y, third, "ターゲット: " + onOff(AutoBuilderConfig.hudShowTarget()), () -> {
+            AutoBuilderConfig.toggleHudShowTarget();
+            refresh();
+        }));
+        addRenderableWidget(button(x + third + 8, y, third, "ETA: " + onOff(AutoBuilderConfig.hudShowEta()), () -> {
+            AutoBuilderConfig.toggleHudShowEta();
+            refresh();
+        }));
+        addRenderableWidget(button(x + (third + 8) * 2, y, third, "DEBUG: " + onOff(AutoBuilderConfig.hudShowDebug()), () -> {
+            AutoBuilderConfig.toggleHudShowDebug();
+            refresh();
+        }));
+        y += row + gap;
+
+        addRenderableWidget(button(x, y, third, "診断ログ: " + onOff(AutoBuilderConfig.diagnosisLogEnabled()), () -> {
             AutoBuilderConfig.toggleDiagnosisLogEnabled();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + third, by, third, "チェックポイント: " + onOff(AutoBuilderConfig.checkpointEnabled()), () -> {
+        addRenderableWidget(button(x + third + 8, y, third, "チェックポイント: " + onOff(AutoBuilderConfig.checkpointEnabled()), () -> {
             AutoBuilderConfig.toggleCheckpointEnabled();
             refresh();
         }));
-        addRenderableWidget(button(x + 40 + third * 2, by, third, "素材プラン: " + onOff(AutoBuilderConfig.materialPlannerEnabled()), () -> {
-            AutoBuilderConfig.toggleMaterialPlannerEnabled();
+        addRenderableWidget(button(x + (third + 8) * 2, y, third, "ドライラン: " + onOff(AutoBuilderConfig.dryRunMode()), () -> {
+            AutoBuilderConfig.toggleDryRunMode();
             refresh();
         }));
-        by += row + gap;
-
-        addRenderableWidget(button(x + 24, by, third, "チェスト等を保護: " + onOff(AutoBuilderConfig.protectUtilityBlocks()), () -> {
-            AutoBuilderConfig.toggleProtectUtilityBlocks();
-            refresh();
-        }));
-        addRenderableWidget(button(x + 32 + third, by, third, "回路を保護: " + onOff(AutoBuilderConfig.protectRedstoneBlocks()), () -> {
-            AutoBuilderConfig.toggleProtectRedstoneBlocks();
-            refresh();
-        }));
-        addRenderableWidget(button(x + 40 + third * 2, by, third, "未完了一覧: " + onOff(AutoBuilderConfig.showUnfinishedList()), () -> {
-            AutoBuilderConfig.toggleShowUnfinishedList();
-            refresh();
-        }));
-        by += row + gap + 10;
-
-        addRenderableWidget(button(x + 24, by, full, "\u623b\u308b", this::backToMain));
     }
 
-    private void initChests() {
-        int panelWidth = Math.min(680, this.width - 36);
-        int x = (this.width - panelWidth) / 2;
-        int y = panelY();
-        int full = panelWidth - 48;
-        int half = (full - 8) / 2;
-        int row = 24;
+    private void initChests(int x, int y, int width) {
+        int row = 25;
         int gap = 6;
-        int by = y + 134;
         List<BlockPos> chests = AutoBuilderConfig.materialChests();
         int count = Math.min(8, chests.size());
         for (int i = 0; i < count; i++) {
             BlockPos pos = chests.get(i);
-            addRenderableWidget(button(x + 24, by, full, "\u524a\u9664: " + pos.getX() + " " + pos.getY() + " " + pos.getZ(), () -> {
+            addRenderableWidget(button(x, y, width, "削除: x=" + pos.getX() + " y=" + pos.getY() + " z=" + pos.getZ(), () -> {
                 MaterialChestProcess.removeRegisteredChest(pos);
                 refresh();
             }));
-            by += row + gap;
+            y += row + gap;
         }
-        by += gap;
-        addRenderableWidget(button(x + 24, by, half, "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u5168\u524a\u9664", () -> {
+        int half = (width - 8) / 2;
+        addRenderableWidget(button(x, y, half, "素材チェスト全削除", () -> {
             AutoBuilderConfig.clearMaterialChests();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, "\u623b\u308b", this::backToMain));
+        addRenderableWidget(button(x + half + 8, y, half, materialChestRegisterLabel(), () -> {
+            AutoBuildController.toggleMaterialChestRegistration(Minecraft.getInstance());
+            refresh();
+        }));
     }
 
-    private void initMaterials() {
-        int panelWidth = Math.min(680, this.width - 36);
-        int x = (this.width - panelWidth) / 2;
-        int y = panelY();
-        int full = panelWidth - 48;
-        int half = (full - 8) / 2;
-        int by = y + panelHeight() - 76;
-
-        addRenderableWidget(button(x + 24, by, half, "\u4eca\u3059\u3050\u7d20\u6750\u88dc\u5145", () -> {
+    private void initMaterials(int x, int y, int width) {
+        int half = (width - 8) / 2;
+        int row = 25;
+        int gap = 7;
+        addRenderableWidget(button(x, y, half, "素材を今すぐ補充", () -> {
             AutoBuildController.fetchMaterialsOnly();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, "ドライラン確認", () -> {
+        addRenderableWidget(button(x + half + 8, y, half, "ドライラン診断", () -> {
             AutoBuildController.runDryRunCheck();
             refresh();
         }));
-        by += 30;
-        addRenderableWidget(button(x + 24, by, half, "診断ログを保存", () -> {
+        y += row + gap;
+        addRenderableWidget(button(x, y, half, "診断ログ保存", () -> {
             AutoBuildController.exportDiagnosisNow();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, "チェックポイント保存", () -> {
+        addRenderableWidget(button(x + half + 8, y, half, "チェックポイント保存", () -> {
             AutoBuildController.saveCheckpointNow();
             refresh();
         }));
-        by += 30;
-        addRenderableWidget(button(x + 24, by, half, "チェックポイントから再開", () -> {
+        y += row + gap;
+        addRenderableWidget(button(x, y, half, "チェックポイントから再開", () -> {
             AutoBuildController.resumeCheckpoint();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, "チェックポイント削除", () -> {
+        addRenderableWidget(button(x + half + 8, y, half, "チェックポイント削除", () -> {
             AutoBuildController.clearCheckpointNow();
             refresh();
         }));
-        by += 30;
-        addRenderableWidget(button(x + 24, by, full, "\u623b\u308b", this::backToMain));
     }
 
     @Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTicks) {
         extractTransparentBackground(graphics);
-        int panelWidth = Math.min(680, this.width - 36);
+        int panelWidth = panelWidth();
         int panelHeight = panelHeight();
         int x = (this.width - panelWidth) / 2;
         int y = panelY();
+        int contentX = x + 18;
+        int contentY = y + 82;
+        int contentWidth = panelWidth - 36;
 
-        graphics.fill(0, 0, this.width, this.height, 0xD8000508);
-        drawGrid(graphics, 28, 0x2219EAF2);
+        graphics.fill(0, 0, this.width, this.height, BACKGROUND);
         graphics.fill(x, y, x + panelWidth, y + panelHeight, PANEL);
-        border(graphics, x, y, panelWidth, panelHeight, CYAN);
-        graphics.fill(x + 10, y + 10, x + panelWidth - 10, y + panelHeight - 10, 0x66000000);
-        border(graphics, x + 10, y + 10, panelWidth - 20, panelHeight - 20, 0x6619EAF2);
+        outline(graphics, x, y, panelWidth, panelHeight, BORDER);
+        graphics.fill(x, y, x + panelWidth, y + 4, pageColor());
 
-        graphics.centeredText(this.font, "\u8a2d \u8a08 \u56f3   \u81ea \u52d5 \u5efa \u7bc9   BETA", this.width / 2, y + 18, TEXT);
-        graphics.centeredText(this.font, "\u30e2\u30fc\u30c9\u9078\u629e / \u7d20\u6750\u88dc\u5145 / \u66f4\u65b0\u7aef\u672b", this.width / 2, y + 34, CYAN);
-        graphics.centeredText(this.font, "\u30d9\u30fc\u30bf\u7248: \u505c\u6b62\u6642\u306f\u81ea\u52d5\u8a3a\u65ad\u3067\u88dc\u5145/\u4f5c\u6210/\u518d\u521d\u671f\u5316\u3092\u8a66\u3057\u307e\u3059\u3002\u30ad\u30fc\u306fMinecraft\u306e\u64cd\u4f5c\u8a2d\u5b9a\u304b\u3089\u5272\u308a\u5f53\u3066\u3067\u304d\u307e\u3059\u3002", this.width / 2, y + 52, DIM);
+        graphics.centeredText(this.font, "AutoBuilder 設定（ベータ版）", this.width / 2, y + 14, TEXT);
+        graphics.centeredText(this.font, "自動建築 / 整地 / 素材補充 / 更新", this.width / 2, y + 30, DIM);
 
-        drawChip(graphics, x + 24, y + 72, "\u81ea\u52d5\u88dc\u5145", AutoBuilderConfig.autoFetchMaterials());
-        drawChip(graphics, x + 182, y + 72, "\u88dc\u5145\u5f8c\u518d\u958b", AutoBuilderConfig.startBuildAfterFetch());
-        drawChip(graphics, x + 340, y + 72, "\u81ea\u52d5\u4f5c\u6210", AutoBuilderConfig.autoCraftMaterials());
-        drawSubstituteChip(graphics, x + 498, y + 72);
-        graphics.text(this.font, "\u30e2\u30fc\u30c9: " + modeNameJa() + " / \u7d20\u6750\u7bb1: " + AutoBuilderConfig.materialChestCount(), x + 24, y + 94, modeColor());
-        graphics.text(this.font, "\u5efa\u7bc9\u9806\u5e8f: " + buildOrderText(), x + 182, y + 94, AutoBuilderConfig.topDownBuild() ? CYAN : ORANGE);
-        graphics.text(this.font, "Baritone: " + statusJa(BaritoneBridge.status()), x + 360, y + 94, BaritoneBridge.isAvailable() ? GREEN : RED);
+        drawStatusChips(graphics, contentX, y + 50, contentWidth);
+        drawPageInfo(graphics, contentX, contentY - 8, contentWidth);
 
-        int sx = x + 24;
-        int sy = y + 108;
         switch (page) {
-            case SETTINGS -> drawSettingsPage(graphics, sx, sy, panelWidth - 48);
-            case CHESTS -> drawChestsPage(graphics, sx, sy, panelWidth - 48);
-            case MATERIALS -> drawMaterialsPage(graphics, sx, sy, panelWidth - 48);
-            default -> {
-                section(graphics, sx, sy, panelWidth - 48, 84, "01  \u30e2\u30fc\u30c9\uff08\u81ea\u52d5\u5efa\u7bc9\u306f\u30d9\u30fc\u30bf\u7248\uff09", "\u914d\u7f6e\u6e08\u307f\u8a2d\u8a08\u56f3\u306e\u81ea\u52d5\u5efa\u7bc9\u3001\u307e\u305f\u306fBaritone\u6574\u5730\u30e2\u30fc\u30c9\u3092\u958b\u59cb\u3057\u307e\u3059");
-                section(graphics, sx, sy + 96, panelWidth - 48, 134, "02  \u7d20\u6750\u88dc\u5145", "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3068\u6574\u5730\u4fdd\u7ba1\u30c1\u30a7\u30b9\u30c8\u304b\u3089\u5c11\u91cf\u305a\u3064\u88dc\u5145\u3057\u3001\u4e0d\u8db3\u5206\u306f\u4f5c\u6210/\u7cbe\u932c\u3057\u307e\u3059");
-                section(graphics, sx, sy + 242, panelWidth - 48, 74, "03  \u7ba1\u7406", "\u5efa\u7bc9\u9806\u5e8f\u3001\u6728\u6750/\u8272\u7d20\u6750\u306e\u4ee3\u7528\u3001\u7d20\u6750\u767b\u9332\u3001\u66f4\u65b0\u78ba\u8a8d\u3067\u3059");
-            }
+            case SETTINGS -> drawSettingsPage(graphics, contentX, contentY, contentWidth);
+            case CHESTS -> drawChestsPage(graphics, contentX, contentY, contentWidth);
+            case MATERIALS -> drawMaterialsPage(graphics, contentX, contentY, contentWidth);
+            default -> drawMainPage(graphics, contentX, contentY, contentWidth);
         }
 
-        graphics.text(this.font, "\u8a2d\u8a08\u56f3: " + statusJa(BaritoneBridge.openSchematicStatus()), x + 24, y + panelHeight - 58, DIM);
-        graphics.text(this.font, "\u81ea\u52d5\u5efa\u7bc9: " + statusJa(AutoBuildController.status()), x + 24, y + panelHeight - 42, statusColor(AutoBuildController.status()));
-        graphics.text(this.font, "\u7d20\u6750\u88dc\u5145: " + statusJa(MaterialChestProcess.status()), x + 24, y + panelHeight - 26, statusColor(MaterialChestProcess.status()));
-        graphics.text(this.font, "\u66f4\u65b0: " + statusJa(AutoUpdater.status()), x + 360, y + panelHeight - 26, DIM);
+        graphics.text(this.font, "状態: " + statusJa(AutoBuildController.status()), contentX, y + panelHeight - 58, statusColor(AutoBuildController.status()));
+        graphics.text(this.font, "素材: " + statusJa(MaterialChestProcess.status()), contentX, y + panelHeight - 44, DIM);
+        graphics.text(this.font, "更新: " + statusJa(AutoUpdater.status()), contentX + contentWidth / 2, y + panelHeight - 44, DIM);
         super.extractRenderState(graphics, mouseX, mouseY, partialTicks);
+    }
+
+    private void addPageTabs(int x, int y, int width) {
+        int tabWidth = (width - 18) / 4;
+        addRenderableWidget(button(x, y, tabWidth, page == Page.MAIN ? "> メイン" : "メイン", () -> setPage(Page.MAIN)));
+        addRenderableWidget(button(x + tabWidth + 6, y, tabWidth, page == Page.CHESTS ? "> チェスト" : "チェスト", () -> setPage(Page.CHESTS)));
+        addRenderableWidget(button(x + (tabWidth + 6) * 2, y, tabWidth, page == Page.MATERIALS ? "> 素材" : "素材", () -> setPage(Page.MATERIALS)));
+        addRenderableWidget(button(x + (tabWidth + 6) * 3, y, tabWidth, page == Page.SETTINGS ? "> 設定" : "設定", () -> setPage(Page.SETTINGS)));
+    }
+
+    private void drawStatusChips(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        int chipWidth = (width - 24) / 4;
+        drawChip(graphics, x, y, chipWidth, "補充", AutoBuilderConfig.autoFetchMaterials() ? "ON" : "OFF", AutoBuilderConfig.autoFetchMaterials() ? GREEN : RED);
+        drawChip(graphics, x + chipWidth + 8, y, chipWidth, "作成", AutoBuilderConfig.autoCraftMaterials() ? "ON" : "OFF", AutoBuilderConfig.autoCraftMaterials() ? GREEN : RED);
+        drawChip(graphics, x + (chipWidth + 8) * 2, y, chipWidth, "代用", AutoBuilderConfig.autoSubstituteMaterials() ? "ON" : "OFF", AutoBuilderConfig.autoSubstituteMaterials() ? GREEN : YELLOW);
+        drawChip(graphics, x + (chipWidth + 8) * 3, y, chipWidth, "箱", String.valueOf(AutoBuilderConfig.materialChestCount()), AutoBuilderConfig.materialChestCount() > 0 ? BLUE : YELLOW);
+    }
+
+    private void drawPageInfo(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        graphics.fill(x, y + 30, x + width, y + 31, 0x445E6A7A);
+        graphics.text(this.font, pageTitle(), x, y + 12, pageColor());
+        AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
+        String progress = String.format(Locale.ROOT, "進捗 %.1f%% / 残り %d / Chest %d", snapshot.progress(), snapshot.remainingBlocks(), snapshot.materialChestCount());
+        graphics.text(this.font, progress, x + width - this.font.width(progress), y + 12, DIM);
+    }
+
+    private void drawMainPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        drawSection(graphics, x, y + 8, width, 82, BLUE, "1. 作業モード", "自動建築はベータ版です。止まった場合は自動診断で補充、作成、再初期化、難所スキップを試します。");
+        drawSection(graphics, x, y + 100, width, 112, GREEN, "2. 素材補充", "素材チェストを登録すると、不足時に少量ずつ取りに戻ります。登録中はチェストを右クリックしてください。");
+        drawSection(graphics, x, y + 222, width, 74, PURPLE, "3. 管理", "更新確認、素材代用、建築順序、素材一覧をここから確認できます。");
+        graphics.text(this.font, "建築順序: " + buildOrderText(), x + 12, y + 316, AutoBuilderConfig.topDownBuild() ? BLUE : YELLOW);
+        graphics.text(this.font, "Baritone: " + statusJa(BaritoneBridge.hudStatus()), x + 180, y + 316, BaritoneBridge.isAvailable() ? GREEN : RED);
+    }
+
+    private void drawSettingsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        drawSection(graphics, x, y + 8, width, 112, CYAN, "HUD 表示", "ゲーム中の左下などに表示する状態 UI です。邪魔なら OFF、位置と文字サイズを調整してください。");
+        drawSection(graphics, x, y + 130, width, 112, YELLOW, "診断と安全", "停止時の自動診断、チェックポイント、保護設定、ドライランを管理します。");
+        AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
+        graphics.text(this.font, "HUD: " + onOff(AutoBuilderConfig.hudEnabled()) + " / " + (AutoBuilderConfig.hudDetailed() ? "詳細" : "簡易")
+                + " / " + AutoBuilderConfig.hudPosition(), x + 12, y + 54, AutoBuilderConfig.hudEnabled() ? GREEN : RED);
+        graphics.text(this.font, "プレビュー: " + snapshot.state() + " / " + String.format(Locale.ROOT, "%.1f%%", snapshot.progress())
+                + " / 残り " + snapshot.remainingBlocks(), x + 12, y + 176, statusColor(snapshot.state()));
+    }
+
+    private void drawChestsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        drawSection(graphics, x, y + 8, width, 296, GREEN, "素材チェスト", "登録済みチェストを個別削除できます。登録中はチェスト、樽、シュルカーなどを右クリックしてください。");
+        List<BlockPos> chests = AutoBuilderConfig.materialChests();
+        graphics.text(this.font, "登録数: " + chests.size(), x + 12, y + 50, chests.isEmpty() ? YELLOW : GREEN);
+        int ly = y + 70;
+        for (int i = 0; i < Math.min(8, chests.size()); i++) {
+            BlockPos pos = chests.get(i);
+            graphics.text(this.font, String.format(Locale.ROOT, "%02d  x:%d y:%d z:%d", i + 1, pos.getX(), pos.getY(), pos.getZ()), x + 12, ly, TEXT);
+            ly += 18;
+        }
+        if (chests.size() > 8) {
+            graphics.text(this.font, "... +" + (chests.size() - 8), x + 12, ly, DIM);
+        }
+    }
+
+    private void drawMaterialsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
+        drawSection(graphics, x, y + 8, width, 296, YELLOW, "素材 / 診断", "必要素材、不足候補、未完了ブロック、チェックポイントを確認します。");
+        AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
+        graphics.text(this.font, "不足候補: " + snapshot.missingMaterialTypes() + "種 / Chest: " + snapshot.materialChestCount(), x + 12, y + 50, snapshot.missingMaterialTypes() > 0 ? YELLOW : GREEN);
+        int ly = y + 72;
+        int index = 1;
+        for (String item : AutoBuildController.materialPlanSummaries(8)) {
+            graphics.text(this.font, String.format(Locale.ROOT, "%02d  %s", index, item), x + 12, ly, TEXT);
+            ly += 16;
+            index++;
+        }
+        if (index == 1) {
+            graphics.text(this.font, "建築開始後に必要素材が表示されます。", x + 12, ly, DIM);
+            ly += 18;
+        }
+        ly += 8;
+        graphics.text(this.font, "未完了ブロック:", x + 12, ly, CYAN);
+        ly += 16;
+        int unfinished = 1;
+        if (AutoBuilderConfig.showUnfinishedList()) {
+            for (String line : AutoBuildController.unfinishedBlockSummaries(6)) {
+                graphics.text(this.font, String.format(Locale.ROOT, "%02d  %s", unfinished, line), x + 12, ly, DIM);
+                ly += 14;
+                unfinished++;
+            }
+        }
+        if (unfinished == 1) {
+            graphics.text(this.font, "まだ未完了一覧はありません。", x + 12, ly, DIM);
+        }
+    }
+
+    private void drawSection(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int color, String title, String note) {
+        graphics.fill(x, y, x + width, y + height, PANEL_2);
+        graphics.fill(x, y, x + 5, y + height, color);
+        outline(graphics, x, y, width, height, 0x665E6A7A);
+        graphics.text(this.font, title, x + 14, y + 10, color);
+        graphics.text(this.font, note, x + 14, y + 27, DIM);
+    }
+
+    private void drawChip(GuiGraphicsExtractor graphics, int x, int y, int width, String label, String value, int color) {
+        graphics.fill(x, y, x + width, y + 18, 0xAA171B22);
+        graphics.fill(x, y, x + 4, y + 18, color);
+        outline(graphics, x, y, width, 18, color);
+        graphics.text(this.font, label + ": " + value, x + 10, y + 5, color);
     }
 
     private Button button(int x, int y, int width, String label, Runnable action) {
@@ -398,6 +448,11 @@ public final class AutoBuilderScreen extends Screen {
     private void refresh() {
         clearWidgets();
         init();
+    }
+
+    private void setPage(Page next) {
+        page = next;
+        refresh();
     }
 
     private void backToMain() {
@@ -418,44 +473,62 @@ public final class AutoBuilderScreen extends Screen {
             }
         } catch (ReflectiveOperationException | LinkageError ignored) {
         }
-        AutoBuildController.message("Baritone\u306e\u6574\u5730\u30e1\u30cb\u30e5\u30fc\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093", ChatFormatting.YELLOW);
+        AutoBuildController.message("Baritoneの整地メニューが見つかりません", ChatFormatting.YELLOW);
         refresh();
     }
 
+    private String pageTitle() {
+        return switch (page) {
+            case SETTINGS -> "詳細設定";
+            case CHESTS -> "素材チェスト";
+            case MATERIALS -> "素材 / 診断";
+            default -> "メイン";
+        };
+    }
+
+    private int pageColor() {
+        return switch (page) {
+            case SETTINGS -> CYAN;
+            case CHESTS -> GREEN;
+            case MATERIALS -> YELLOW;
+            default -> BLUE;
+        };
+    }
+
     private static String pauseLabel() {
-        return AutoBuildController.isPaused() ? "\u73fe\u5728\u306e\u4f5c\u696d\u3092\u518d\u958b" : "\u73fe\u5728\u306e\u4f5c\u696d\u3092\u4e00\u6642\u505c\u6b62";
+        return AutoBuildController.isPaused() ? "現在の作業を再開" : "現在の作業を一時停止";
     }
 
     private static String autoFetchLabel() {
-        return "\u7d20\u6750\u81ea\u52d5\u88dc\u5145: " + onOff(AutoBuilderConfig.autoFetchMaterials());
+        return "素材自動補充: " + onOff(AutoBuilderConfig.autoFetchMaterials());
     }
 
     private static String autoResumeLabel() {
-        return "\u88dc\u5145\u5f8c\u81ea\u52d5\u518d\u958b: " + onOff(AutoBuilderConfig.startBuildAfterFetch());
+        return "補充後自動再開: " + onOff(AutoBuilderConfig.startBuildAfterFetch());
     }
 
     private static String autoCraftLabel() {
-        return "\u4e0d\u8db3\u7d20\u6750\u3092\u81ea\u52d5\u4f5c\u6210: " + onOff(AutoBuilderConfig.autoCraftMaterials());
+        return "不足素材を自動作成: " + onOff(AutoBuilderConfig.autoCraftMaterials());
     }
 
     private static String topDownLabel() {
-        return "\u5efa\u7bc9\u9806\u5e8f: " + buildOrderText();
+        return "建築順序: " + buildOrderText();
     }
 
     private static String substituteLabel() {
-        return "\u7d20\u6750\u4ee3\u7528: " + onOff(AutoBuilderConfig.autoSubstituteMaterials());
+        return "素材代用: " + onOff(AutoBuilderConfig.autoSubstituteMaterials());
     }
 
     private static String hudEnabledLabel() {
-        return "HUD\u8868\u793a: " + onOff(AutoBuilderConfig.hudEnabled());
+        return "HUD表示: " + onOff(AutoBuilderConfig.hudEnabled());
     }
 
     private static String hudModeLabel() {
-        return "HUD\u8868\u793a\u5f62\u5f0f: " + (AutoBuilderConfig.hudDetailed() ? "detailed" : "compact");
+        return "HUD形式: " + (AutoBuilderConfig.hudDetailed() ? "詳細" : "簡易");
     }
 
     private static String hudPositionLabel() {
-        return "HUD\u4f4d\u7f6e: " + AutoBuilderConfig.hudPosition().name();
+        return "HUD位置: " + AutoBuilderConfig.hudPosition().name();
     }
 
     private static String safetyModeLabel() {
@@ -467,88 +540,51 @@ public final class AutoBuilderScreen extends Screen {
     }
 
     private static String buildOrderText() {
-        return AutoBuilderConfig.topDownBuild() ? "\u4e0a\u304b\u3089" : "\u4e0b\u304b\u3089";
+        return AutoBuilderConfig.topDownBuild() ? "上から" : "下から";
     }
 
     private static String materialChestRegisterLabel() {
-        return MaterialChestProcess.isRegisteringChests()
-                ? "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u767b\u9332\u3092\u7d42\u4e86"
-                : "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3092\u767b\u9332";
+        return MaterialChestProcess.isRegisteringChests() ? "素材チェスト登録を終了" : "素材チェストを登録";
     }
 
     private static String onOff(boolean value) {
-        return value ? "\u6709\u52b9" : "\u7121\u52b9";
-    }
-
-    private static String modeNameJa() {
-        return switch (AutoBuildController.modeName()) {
-            case "BUILDING" -> "\u5efa\u7bc9\u4e2d";
-            case "FETCHING" -> "\u7d20\u6750\u88dc\u5145\u4e2d";
-            case "CRAFTING" -> "\u7d20\u6750\u4f5c\u6210\u4e2d";
-            case "SMELTING" -> "\u7d20\u6750\u7cbe\u932c\u4e2d";
-            case "DIAGNOSING" -> "\u81ea\u52d5\u8a3a\u65ad\u4e2d";
-            case "WAITING_FOR_MATERIALS" -> "\u7d20\u6750\u5f85\u3061";
-            case "PAUSED" -> "\u4e00\u6642\u505c\u6b62\u4e2d";
-            case "COMPLETE" -> "\u5b8c\u4e86";
-            default -> "\u5f85\u6a5f\u4e2d";
-        };
+        return value ? "ON" : "OFF";
     }
 
     private static String statusJa(String value) {
         if (value == null || value.isBlank()) {
             return "";
         }
-        if (value.contains("\u8cc7\u6750")) {
-            return value;
-        }
         if (value.contains("Baritone not found")) {
-            return "Baritone\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093";
-        }
-        if (value.contains("Builder process not found")) {
-            return "\u5efa\u7bc9\u30d7\u30ed\u30bb\u30b9\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093";
+            return "Baritoneが見つかりません";
         }
         if (value.contains("Builder paused") || value.equals("Paused")) {
-            return "\u4e00\u6642\u505c\u6b62\u4e2d";
+            return "一時停止中";
         }
-        if (value.contains("Builder active") || value.equals("Building") || value.contains("Building from placed schematic")) {
-            return "\u5efa\u7bc9\u4e2d";
+        if (value.contains("Builder active") || value.equals("Building") || value.contains("building")) {
+            return "実行中";
         }
-        if (value.contains("Builder idle") || value.equals("Idle")) {
-            return "\u5f85\u6a5f\u4e2d";
-        }
-        if (value.contains("ready")) {
-            return "\u8a2d\u8a08\u56f3\u3092\u691c\u51fa\u6e08\u307f";
-        }
-        if (value.contains("No placed")) {
-            return "\u914d\u7f6e\u6e08\u307f\u306e\u8a2d\u8a08\u56f3\u304c\u898b\u3064\u304b\u308a\u307e\u305b\u3093";
-        }
-        if (value.contains("Fetching") || value.contains("Going to material chest") || value.contains("Walking to material chest")) {
-            return "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3078\u79fb\u52d5\u4e2d";
-        }
-        if (value.contains("Opening material chest")) {
-            return "\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3092\u958b\u3044\u3066\u3044\u307e\u3059";
-        }
-        if (value.contains("Taking build materials")) {
-            return "\u5efa\u7bc9\u7d20\u6750\u3092\u53d6\u5f97\u4e2d";
-        }
-        if (value.contains("Crafting")) {
-            return "\u7d20\u6750\u3092\u4f5c\u6210\u4e2d";
-        }
-        if (value.contains("Smelting")) {
-            return "\u7d20\u6750\u3092\u7cbe\u932c\u4e2d";
-        }
-        if (value.contains("Fetched")) {
-            return "\u7d20\u6750\u88dc\u5145\u6e08\u307f";
+        if (value.contains("idle") || value.contains("Idle")) {
+            return "待機中";
         }
         if (value.contains("complete")) {
-            return "\u5b8c\u4e86";
+            return "完了";
         }
         return value;
     }
 
-    private int modeColor() {
-        if (AutoBuildController.isPaused()) {
-            return ORANGE;
+    private int statusColor(String value) {
+        if (value == null) {
+            return DIM;
+        }
+        if (value.contains("不足") || value.contains("Missing") || value.contains("Shortage") || value.contains("failed") || value.contains("Error")) {
+            return RED;
+        }
+        if (value.contains("一時停止") || value.contains("Paused") || value.contains("waiting") || value.contains("待機")) {
+            return YELLOW;
+        }
+        if (value.contains("完了") || value.contains("complete")) {
+            return BLUE;
         }
         if (AutoBuildController.isRunning()) {
             return GREEN;
@@ -556,117 +592,19 @@ public final class AutoBuilderScreen extends Screen {
         return DIM;
     }
 
-    private int statusColor(String value) {
-        if (value != null && (value.contains("Shortage") || value.contains("\u8cc7\u6750") || value.contains("Missing"))) {
-            return RED;
-        }
-        return DIM;
-    }
-
-    private void section(GuiGraphicsExtractor graphics, int x, int y, int width, int height, String title, String note) {
-        graphics.fill(x, y, x + width, y + height, BLOCK);
-        border(graphics, x, y, width, height, 0x6619EAF2);
-        graphics.text(this.font, title, x + 10, y + 7, CYAN);
-        graphics.text(this.font, note, x + 10, y + 20, DIM);
-    }
-
-    private void drawSettingsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
-        section(graphics, x, y, width, 270, "HUD  \u72b6\u614bUI\u8a2d\u5b9a", "\u30b2\u30fc\u30e0\u4e2d\u306e\u5de6\u4e0b\u306a\u3069\u306b\u8868\u793a\u3059\u308bAutoBuilder\u72b6\u614bHUD\u3067\u3059");
-        graphics.text(this.font, "\u73fe\u5728: " + hudEnabledLabel() + " / " + hudModeLabel(), x + 10, y + 42, AutoBuilderConfig.hudEnabled() ? GREEN : RED);
-        graphics.text(this.font, "\u4f4d\u7f6e: " + AutoBuilderConfig.hudPosition() + "  X:" + AutoBuilderConfig.hudXOffset() + "  Y:" + AutoBuilderConfig.hudYOffset(), x + 10, y + 58, CYAN);
-        graphics.text(this.font, "\u80cc\u666f\u900f\u660e\u5ea6: " + AutoBuilderConfig.hudOpacity() + " / \u6587\u5b57: " + AutoBuilderConfig.hudTextScalePercent() + "%", x + 10, y + 74, DIM);
-        graphics.text(this.font, "\u8868\u793a\u9805\u76ee: \u7d20\u6750\u4e0d\u8db3=" + onOff(AutoBuilderConfig.hudShowMissingMaterials())
-                + " Baritone=" + onOff(AutoBuilderConfig.hudShowBaritoneStatus())
-                + " Target=" + onOff(AutoBuilderConfig.hudShowTarget()), x + 10, y + 90, DIM);
-        graphics.text(this.font, safetyModeLabel() + " / 診断ログ=" + onOff(AutoBuilderConfig.diagnosisLogEnabled())
-                + " / 保護=" + onOff(AutoBuilderConfig.protectUtilityBlocks() || AutoBuilderConfig.protectRedstoneBlocks()), x + 10, y + 106, CYAN);
-        graphics.text(this.font, "チェックポイント: " + AutoBuildController.checkpointSummary()
-                + " / 最終診断: " + AutoBuilderDiagnostics.lastExportPath(), x + 10, y + 122, DIM);
-        AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
-        graphics.text(this.font, "\u30d7\u30ec\u30d3\u30e5\u30fc: " + snapshot.state() + " / \u9032\u6357 " + String.format(java.util.Locale.ROOT, "%.1f%%", snapshot.progress())
-                + " / \u6b8b\u308a " + snapshot.remainingBlocks(), x + 10, y + 138, statusColor(snapshot.state()));
-    }
-
-    private void drawChestsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
-        section(graphics, x, y, width, 270, "MATERIAL CHESTS  \u7d20\u6750\u30c1\u30a7\u30b9\u30c8", "\u767b\u9332\u6e08\u307f\u306e\u7d20\u6750\u30c1\u30a7\u30b9\u30c8\u3067\u3059\u3002\u30dc\u30bf\u30f3\u3067\u500b\u5225\u524a\u9664\u3067\u304d\u307e\u3059");
-        List<BlockPos> chests = AutoBuilderConfig.materialChests();
-        graphics.text(this.font, "\u767b\u9332\u6570: " + chests.size(), x + 10, y + 42, chests.isEmpty() ? ORANGE : GREEN);
-        int ly = y + 60;
-        int index = 1;
-        for (BlockPos pos : chests.subList(0, Math.min(8, chests.size()))) {
-            graphics.text(this.font, String.format(java.util.Locale.ROOT, "%02d  x:%d y:%d z:%d", index, pos.getX(), pos.getY(), pos.getZ()), x + 10, ly, TEXT);
-            ly += 18;
-            index++;
-        }
-        if (chests.size() > 8) {
-            graphics.text(this.font, "... +" + (chests.size() - 8), x + 10, ly, DIM);
-        }
-    }
-
-    private void drawMaterialsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
-        section(graphics, x, y, width, 270, "MATERIAL / DIAGNOSIS  \u7d20\u6750\u30fb\u8a3a\u65ad", "\u5fc5\u8981\u7d20\u6750\u3001\u672a\u5b8c\u4e86\u30d6\u30ed\u30c3\u30af\u3001\u8a3a\u65ad\u30ed\u30b0\u3092\u78ba\u8a8d\u3057\u307e\u3059");
-        AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
-        graphics.text(this.font, "\u4e0d\u8db3\u5019\u88dc: " + snapshot.missingMaterialTypes() + "\u7a2e / \u7d20\u6750\u30c1\u30a7\u30b9\u30c8: " + snapshot.materialChestCount(), x + 10, y + 42, snapshot.missingMaterialTypes() > 0 ? ORANGE : GREEN);
-        int ly = y + 64;
-        int index = 1;
-        for (String item : AutoBuildController.materialPlanSummaries(8)) {
-            graphics.text(this.font, String.format(java.util.Locale.ROOT, "%02d  %s", index, item), x + 10, ly, TEXT);
-            ly += 16;
-            index++;
-        }
-        if (index == 1) {
-            graphics.text(this.font, "\u307e\u3060\u5fc5\u8981\u7d20\u6750\u60c5\u5831\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5efa\u7bc9\u958b\u59cb\u5f8c\u306b\u66f4\u65b0\u3055\u308c\u307e\u3059\u3002", x + 10, ly, DIM);
-            ly += 16;
-        }
-        ly += 8;
-        graphics.text(this.font, "未完了ブロック:", x + 10, ly, CYAN);
-        ly += 16;
-        int unfinished = 1;
-        if (AutoBuilderConfig.showUnfinishedList()) {
-            for (String line : AutoBuildController.unfinishedBlockSummaries(6)) {
-                graphics.text(this.font, String.format(java.util.Locale.ROOT, "%02d  %s", unfinished, line), x + 10, ly, DIM);
-                ly += 14;
-                unfinished++;
-            }
-        }
-        if (unfinished == 1) {
-            graphics.text(this.font, "未完了一覧はまだありません。", x + 10, ly, DIM);
-        }
-    }
-
-    private void drawChip(GuiGraphicsExtractor graphics, int x, int y, String label, boolean on) {
-        int color = on ? GREEN : RED;
-        graphics.fill(x, y, x + 146, y + 16, on ? 0x3332FF88 : 0x33FF5548);
-        border(graphics, x, y, 146, 16, color);
-        graphics.text(this.font, label + ": " + onOff(on), x + 6, y + 4, color);
-    }
-
-    private void drawSubstituteChip(GuiGraphicsExtractor graphics, int x, int y) {
-        boolean on = AutoBuilderConfig.autoSubstituteMaterials();
-        int color = on ? GREEN : RED;
-        graphics.fill(x, y, x + 146, y + 16, on ? 0x3332FF88 : 0x33FF5548);
-        border(graphics, x, y, 146, 16, color);
-        graphics.text(this.font, "\u7d20\u6750\u4ee3\u7528: " + onOff(on), x + 6, y + 4, color);
-    }
-
-    private void drawGrid(GuiGraphicsExtractor graphics, int step, int color) {
-        for (int gx = 0; gx < this.width; gx += step) {
-            graphics.fill(gx, 0, gx + 1, this.height, color);
-        }
-        for (int gy = 0; gy < this.height; gy += step) {
-            graphics.fill(0, gy, this.width, gy + 1, color);
-        }
+    private int panelWidth() {
+        return Math.min(760, this.width - 32);
     }
 
     private int panelY() {
-        return Math.max(18, (this.height - panelHeight()) / 2);
+        return Math.max(12, (this.height - panelHeight()) / 2);
     }
 
     private static int panelHeight() {
-        return 520;
+        return 500;
     }
 
-    private static void border(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int color) {
+    private static void outline(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int color) {
         graphics.fill(x, y, x + width, y + 1, color);
         graphics.fill(x, y + height - 1, x + width, y + height, color);
         graphics.fill(x, y, x + 1, y + height, color);

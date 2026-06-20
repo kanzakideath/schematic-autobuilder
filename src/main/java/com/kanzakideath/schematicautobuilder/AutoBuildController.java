@@ -30,6 +30,7 @@ public final class AutoBuildController {
     private static final int CREATIVE_COMMAND_FILL_REMAINING_THRESHOLD = 512;
     private static final int CREATIVE_COMMAND_FILL_BATCH = 64;
     private static final int MAX_REPEATED_CREATIVE_COMMAND_FILL = 2;
+    private static final int CREATIVE_STUCK_SKIP_LIMIT = 128;
     private static final int MAX_COMPLETION_RECHECKS = 2;
     private static final int COMPLETION_RECHECK_GUARD_TICKS = 12;
 
@@ -655,6 +656,18 @@ public final class AutoBuildController {
             return true;
         }
         if (isCreativeMode()) {
+            if (stats.remainingBlocks() > 0 && stats.remainingBlocks() <= 16) {
+                int skipped = BaritoneBridge.markCurrentBuildTargetsUnreachable("creative diagnostic could not progress small remainder", CREATIVE_STUCK_SKIP_LIMIT);
+                if (skipped > 0) {
+                    refetchGuardTicks = DIAGNOSTIC_RETRY_TICKS;
+                    BaritoneBridge.cancelPathing();
+                    BaritoneBridge.resumeBuilder();
+                    mode = Mode.BUILDING;
+                    status = "Creative診断: 残った難所を後回しにして続行します (" + skipped + ")";
+                    message(status, ChatFormatting.YELLOW);
+                    return true;
+                }
+            }
             int deferred = BaritoneBridge.deferCurrentBuildTargets("creative diagnostic");
             if (deferred > 0) {
                 refetchGuardTicks = DIAGNOSTIC_RETRY_TICKS;
@@ -702,7 +715,19 @@ public final class AutoBuildController {
             repeatedCreativeCommandFillAttempts = 1;
         }
         if (repeatedCreativeCommandFillAttempts > MAX_REPEATED_CREATIVE_COMMAND_FILL) {
-            status = "Creative補完をスキップ: 同じ対象で改善しないため別手順へ進みます";
+            int skipped = BaritoneBridge.markCurrentBuildTargetsUnreachable("creative command fill did not change " + signature, CREATIVE_STUCK_SKIP_LIMIT);
+            if (skipped > 0) {
+                refetchGuardTicks = DIAGNOSTIC_RETRY_TICKS;
+                BaritoneBridge.cancelPathing();
+                BaritoneBridge.resumeBuilder();
+                mode = Mode.BUILDING;
+                resetProgressWatch();
+                resetCreativeCommandFillWatch();
+                status = "Creative\u88dc\u5b8c\u3067\u9032\u307e\u306a\u3044\u96e3\u6240\u3092\u5f8c\u56de\u3057\u306b\u3057\u3066\u7d9a\u884c\u3057\u307e\u3059 (" + skipped + ")";
+                message(status, ChatFormatting.YELLOW);
+                return true;
+            }
+            status = "Creative\u88dc\u5b8c\u3092\u30b9\u30ad\u30c3\u30d7: \u540c\u3058\u5bfe\u8c61\u3067\u6539\u5584\u3057\u306a\u3044\u305f\u3081\u5225\u624b\u9806\u3078\u9032\u307f\u307e\u3059";
             message(status, ChatFormatting.YELLOW);
             return false;
         }
@@ -715,7 +740,7 @@ public final class AutoBuildController {
         BaritoneBridge.resumeBuilder();
         mode = Mode.BUILDING;
         resetProgressWatch();
-        status = "Creative補完: 未完了ブロックを直接反映しました (" + sent + ")";
+        status = "Creative\u88dc\u5b8c: \u672a\u5b8c\u4e86\u30d6\u30ed\u30c3\u30af\u3092\u76f4\u63a5\u53cd\u6620\u3057\u307e\u3057\u305f (" + sent + ")";
         message(status + " / " + reason, ChatFormatting.GREEN);
         return true;
     }

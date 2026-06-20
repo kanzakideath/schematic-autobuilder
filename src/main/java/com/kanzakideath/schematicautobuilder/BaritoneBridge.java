@@ -241,7 +241,7 @@ public final class BaritoneBridge {
             List<?> approx = approxObject instanceof List<?> list ? list : Collections.emptyList();
             Method desiredState = schematic.getClass().getMethod("desiredState", int.class, int.class, int.class, BlockState.class, List.class);
             desiredState.setAccessible(true);
-            int sent = 0;
+            List<CreativeSetCommand> commands = new ArrayList<>();
             for (Object raw : iterable) {
                 if (!(raw instanceof BlockPos pos)) {
                     continue;
@@ -261,16 +261,42 @@ public final class BaritoneBridge {
                 if (blockCommand.isBlank()) {
                     continue;
                 }
-                minecraft.getConnection().sendCommand("setblock " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + blockCommand + " replace");
-                sent++;
-                if (sent >= maxCommands) {
+                commands.add(new CreativeSetCommand(
+                        creativeSetPriority(desired),
+                        "setblock " + pos.getX() + " " + pos.getY() + " " + pos.getZ() + " " + blockCommand + " replace"
+                ));
+                if (commands.size() >= maxCommands) {
                     break;
                 }
             }
-            return sent;
+            commands.sort(Comparator.comparingInt(CreativeSetCommand::priority));
+            for (CreativeSetCommand command : commands) {
+                minecraft.getConnection().sendCommand(command.command());
+            }
+            return commands.size();
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             return 0;
         }
+    }
+
+    private record CreativeSetCommand(int priority, String command) {}
+
+    private static int creativeSetPriority(BlockState state) {
+        if (state == null) {
+            return 100;
+        }
+        Identifier id = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        String path = id == null ? "" : id.getPath();
+        if (path.endsWith("_bed")) {
+            String part = statePropertyValue(state, "part");
+            if ("foot".equals(part)) {
+                return 0;
+            }
+            if ("head".equals(part)) {
+                return 1;
+            }
+        }
+        return 10;
     }
 
     private static String blockStateCommand(BlockState state) {
@@ -297,6 +323,18 @@ public final class BaritoneBridge {
             }
         }
         return command.toString();
+    }
+
+    private static String statePropertyValue(BlockState state, String propertyName) {
+        if (state == null || propertyName == null) {
+            return "";
+        }
+        for (Property.Value<?> value : state.getValues().toList()) {
+            if (propertyName.equals(value.property().getName())) {
+                return statePropertyValue(value);
+            }
+        }
+        return "";
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
@@ -513,6 +551,21 @@ public final class BaritoneBridge {
         }
         try {
             Object result = builder.getClass().getMethod("deferCurrentTargets", String.class).invoke(builder, reason);
+            return result instanceof Number number ? number.intValue() : 0;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return 0;
+        }
+    }
+
+    public static int markCurrentBuildTargetsUnreachable(String reason, int limit) {
+        Object builder = builderProcess();
+        if (builder == null) {
+            return 0;
+        }
+        try {
+            Object result = builder.getClass()
+                    .getMethod("markCurrentTargetsUnreachable", String.class, int.class)
+                    .invoke(builder, reason, limit);
             return result instanceof Number number ? number.intValue() : 0;
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             return 0;
