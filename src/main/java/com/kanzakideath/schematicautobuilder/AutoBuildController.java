@@ -119,6 +119,8 @@ public final class AutoBuildController {
         closeContainerIfNeeded();
         BaritoneBridge.pauseBuilder();
         BaritoneBridge.cancelPathing();
+        AutoBuilderDiagnostics.export("complete: " + completeStatus);
+        AutoBuilderCheckpoint.clear();
         mode = Mode.COMPLETE;
         pausedFrom = Mode.IDLE;
         diagnosticAttempts = 0;
@@ -193,6 +195,10 @@ public final class AutoBuildController {
     }
 
     public static void startFullAutoBuild() {
+        if (AutoBuilderConfig.dryRunMode()) {
+            runDryRunCheck();
+            return;
+        }
         if (!BaritoneBridge.isAvailable()) {
             status = "Baritone not found";
             mode = Mode.ERROR;
@@ -202,6 +208,7 @@ public final class AutoBuildController {
         MaterialChestProcess.stop("Restarting full auto build");
         BaritoneBridge.cancelPathing();
         BaritoneBridge.resumeBuilder();
+        BaritoneBridge.applyBuildPolicies();
         if (!BaritoneBridge.startPlacedSchematicBuild()) {
             status = BaritoneBridge.openSchematicStatus();
             message(status, ChatFormatting.YELLOW);
@@ -223,6 +230,7 @@ public final class AutoBuildController {
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = "Building from placed schematic";
         activeSchematicOrigin = null;
+        writeCheckpoint("start placed schematic");
         rememberNeededItems();
         int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems, BaritoneBridge.preferredScaffoldItems(lastNeededItems));
         if (supplied > 0) {
@@ -232,6 +240,12 @@ public final class AutoBuildController {
     }
 
     public static void startFullAutoBuildFromFile(String fileName) {
+        if (AutoBuilderConfig.dryRunMode()) {
+            activeSchematicFileName = fileName == null ? "" : fileName;
+            activeSchematicOrigin = null;
+            runDryRunCheck();
+            return;
+        }
         if (!BaritoneBridge.isAvailable()) {
             status = "Baritone not found";
             mode = Mode.ERROR;
@@ -247,6 +261,7 @@ public final class AutoBuildController {
         MaterialChestProcess.stop("Restarting full auto build from file");
         BaritoneBridge.cancelPathing();
         BaritoneBridge.resumeBuilder();
+        BaritoneBridge.applyBuildPolicies();
         if (!BaritoneBridge.startSchematicFileBuild(fileName)) {
             status = BaritoneBridge.schematicFileStatus();
             message(status, ChatFormatting.YELLOW);
@@ -268,6 +283,7 @@ public final class AutoBuildController {
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = BaritoneBridge.schematicFileStatus();
+        writeCheckpoint("start file schematic");
         rememberNeededItems();
         int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems, BaritoneBridge.preferredScaffoldItems(lastNeededItems));
         if (supplied > 0) {
@@ -277,6 +293,12 @@ public final class AutoBuildController {
     }
 
     public static void startFullAutoBuildFromFileAt(String fileName, int x, int y, int z) {
+        if (AutoBuilderConfig.dryRunMode()) {
+            activeSchematicFileName = fileName == null ? "" : fileName;
+            activeSchematicOrigin = new BlockPos(x, y, z);
+            runDryRunCheck();
+            return;
+        }
         if (!BaritoneBridge.isAvailable()) {
             status = "Baritone not found";
             mode = Mode.ERROR;
@@ -292,6 +314,7 @@ public final class AutoBuildController {
         MaterialChestProcess.stop("Restarting full auto build from file at origin");
         BaritoneBridge.cancelPathing();
         BaritoneBridge.resumeBuilder();
+        BaritoneBridge.applyBuildPolicies();
         if (!BaritoneBridge.startSchematicFileBuildAt(fileName, x, y, z)) {
             status = BaritoneBridge.schematicFileStatus();
             message(status, ChatFormatting.YELLOW);
@@ -313,6 +336,7 @@ public final class AutoBuildController {
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = BaritoneBridge.schematicFileStatus();
+        writeCheckpoint("start file schematic at origin");
         rememberNeededItems();
         int supplied = CreativeMaterialSupplier.supplyNeeded(Minecraft.getInstance(), lastNeededItems, BaritoneBridge.preferredScaffoldItems(lastNeededItems));
         if (supplied > 0) {
@@ -345,6 +369,8 @@ public final class AutoBuildController {
         activeSchematicFileName = "";
         activeSchematicOrigin = null;
         baritoneReportedFinished = false;
+        AutoBuilderDiagnostics.export("cancel");
+        AutoBuilderCheckpoint.clear();
         status = "Cancelled";
         cachedSnapshotAtMs = 0L;
         message("Auto builder stopped", ChatFormatting.YELLOW);
@@ -455,6 +481,66 @@ public final class AutoBuildController {
                 .toList();
     }
 
+    public static List<String> materialPlanSummaries(int limit) {
+        List<String> plan = BaritoneBridge.materialPlanSummaries(limit);
+        return plan.isEmpty() ? neededMaterialSummaries(limit) : plan;
+    }
+
+    public static List<String> unfinishedBlockSummaries(int limit) {
+        return BaritoneBridge.unfinishedBlockSummaries(limit);
+    }
+
+    public static String exportDiagnosisNow() {
+        String path = AutoBuilderDiagnostics.export("manual export");
+        if (path.isBlank()) {
+            message("診断ログを保存できませんでした", ChatFormatting.YELLOW);
+        } else {
+            message("診断ログを保存しました: " + path, ChatFormatting.GREEN);
+        }
+        return path;
+    }
+
+    public static void runDryRunCheck() {
+        rememberNeededItems();
+        BaritoneBridge.BuildStats stats = BaritoneBridge.buildStats();
+        String path = AutoBuilderDiagnostics.export("dry run");
+        status = "Dry-run: remaining=" + stats.remainingBlocks() + " materialTypes=" + lastNeededItems.size();
+        cachedSnapshotAtMs = 0L;
+        message(status + (path.isBlank() ? "" : " / " + path), ChatFormatting.AQUA);
+    }
+
+    public static void saveCheckpointNow() {
+        writeCheckpoint("manual save");
+        message("チェックポイントを保存しました: " + AutoBuilderCheckpoint.summary(), ChatFormatting.GREEN);
+    }
+
+    public static void clearCheckpointNow() {
+        AutoBuilderCheckpoint.clear();
+        message("チェックポイントを削除しました", ChatFormatting.YELLOW);
+    }
+
+    public static void resumeCheckpoint() {
+        AutoBuilderCheckpoint.Snapshot snapshot = AutoBuilderCheckpoint.load();
+        if (snapshot == null) {
+            message("再開できるチェックポイントがありません", ChatFormatting.YELLOW);
+            return;
+        }
+        if (snapshot.hasFileBuild()) {
+            if (snapshot.hasOrigin()) {
+                BlockPos origin = snapshot.origin();
+                startFullAutoBuildFromFileAt(snapshot.schematicFile(), origin.getX(), origin.getY(), origin.getZ());
+            } else {
+                startFullAutoBuildFromFile(snapshot.schematicFile());
+            }
+            return;
+        }
+        startFullAutoBuild();
+    }
+
+    public static String checkpointSummary() {
+        return AutoBuilderCheckpoint.summary();
+    }
+
     private static void monitorBuilder() {
         if (BaritoneBridge.isBuilderPaused()) {
             builderPausedTicks++;
@@ -545,6 +631,8 @@ public final class AutoBuildController {
     private static boolean runAutoDiagnostic(String trigger, boolean allowChestFetch) {
         mode = Mode.DIAGNOSING;
         status = "自動診断中: " + trigger;
+        writeCheckpoint("diagnostic: " + trigger);
+        AutoBuilderDiagnostics.export("diagnostic: " + trigger);
         if (diagnosticNoticeTicks <= 0) {
             diagnosticNoticeTicks = DIAGNOSTIC_NOTICE_TICKS;
             message(status + "。代替手順を試します。", ChatFormatting.AQUA);
@@ -707,6 +795,7 @@ public final class AutoBuildController {
     private static void resumeBuildAfterMaterialChange(String resumeStatus) {
         BaritoneBridge.cancelPathing();
         BaritoneBridge.resumeBuilder();
+        BaritoneBridge.applyBuildPolicies();
         materialShortageNotified = false;
         if (!restartActiveBuild()) {
             mode = Mode.WAITING_FOR_MATERIALS;
@@ -720,10 +809,12 @@ public final class AutoBuildController {
         mode = Mode.BUILDING;
         lastWorkMode = WorkMode.AUTO_BUILD;
         status = resumeStatus;
+        writeCheckpoint("resume after material change");
         message(status, ChatFormatting.GREEN);
     }
 
     private static boolean restartActiveBuild() {
+        BaritoneBridge.applyBuildPolicies();
         if (activeSchematicFileName != null && !activeSchematicFileName.isBlank()) {
             if (activeSchematicOrigin != null) {
                 return BaritoneBridge.startSchematicFileBuildAt(activeSchematicFileName, activeSchematicOrigin.getX(), activeSchematicOrigin.getY(), activeSchematicOrigin.getZ());
@@ -731,6 +822,10 @@ public final class AutoBuildController {
             return BaritoneBridge.startSchematicFileBuild(activeSchematicFileName);
         }
         return BaritoneBridge.startPlacedSchematicBuild();
+    }
+
+    private static void writeCheckpoint(String reason) {
+        AutoBuilderCheckpoint.save(activeSchematicFileName, activeSchematicOrigin, mode.name(), reason + " / " + status);
     }
 
     private static void retryWaitingForMaterials() {
@@ -835,6 +930,8 @@ public final class AutoBuildController {
         closeContainerIfNeeded();
         BaritoneBridge.pauseBuilder();
         BaritoneBridge.cancelPathing();
+        writeCheckpoint("pause");
+        AutoBuilderDiagnostics.export("pause");
         message("Auto builder paused", ChatFormatting.YELLOW);
     }
 
@@ -850,6 +947,7 @@ public final class AutoBuildController {
             }
         }
         BaritoneBridge.resumeBuilder();
+        BaritoneBridge.applyBuildPolicies();
         if (resumeFrom == Mode.BUILDING || BaritoneBridge.isBuilderActive()) {
             if (!BaritoneBridge.isBuilderActive()) {
                 if (!restartActiveBuild()) {
@@ -866,6 +964,7 @@ public final class AutoBuildController {
             mode = Mode.BUILDING;
             lastWorkMode = WorkMode.AUTO_BUILD;
             status = "Resumed build";
+            writeCheckpoint("resume");
             message(status, ChatFormatting.GREEN);
             return;
         }

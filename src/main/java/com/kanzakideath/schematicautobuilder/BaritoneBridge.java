@@ -94,6 +94,41 @@ public final class BaritoneBridge {
             Blocks.CHERRY_PLANKS.asItem(),
             Blocks.BAMBOO_PLANKS.asItem()
     );
+    private static final List<Block> UTILITY_PROTECTED_BLOCKS = List.of(
+            Blocks.CHEST,
+            Blocks.TRAPPED_CHEST,
+            Blocks.BARREL,
+            Blocks.CRAFTING_TABLE,
+            Blocks.FURNACE,
+            Blocks.BLAST_FURNACE,
+            Blocks.SMOKER,
+            Blocks.HOPPER,
+            Blocks.DISPENSER,
+            Blocks.DROPPER,
+            Blocks.BREWING_STAND,
+            Blocks.ENCHANTING_TABLE,
+            Blocks.ANVIL,
+            Blocks.CHIPPED_ANVIL,
+            Blocks.DAMAGED_ANVIL
+    );
+    private static final List<Block> REDSTONE_PROTECTED_BLOCKS = List.of(
+            Blocks.REDSTONE_WIRE,
+            Blocks.REDSTONE_TORCH,
+            Blocks.REDSTONE_WALL_TORCH,
+            Blocks.REPEATER,
+            Blocks.COMPARATOR,
+            Blocks.LEVER,
+            Blocks.STONE_BUTTON,
+            Blocks.OAK_BUTTON,
+            Blocks.OBSERVER,
+            Blocks.PISTON,
+            Blocks.STICKY_PISTON,
+            Blocks.TARGET,
+            Blocks.DAYLIGHT_DETECTOR,
+            Blocks.TRIPWIRE,
+            Blocks.TRIPWIRE_HOOK,
+            Blocks.NOTE_BLOCK
+    );
 
     public record BuildStats(
             int totalBlocks,
@@ -499,11 +534,22 @@ public final class BaritoneBridge {
         clearCollectionSetting(settings, "okIfAir");
         clearMapSetting(settings, "buildValidSubstitutes");
         clearMapSetting(settings, "buildSubstitutes");
+        applySafetyModeSettings(settings);
+        applyProtectionSettings(settings);
         if (AutoBuilderConfig.autoSubstituteMaterials()) {
             Map<Block, List<Block>> substitutes = automaticMaterialSubstitutes();
             putMapSettingValues(settings, "buildSubstitutes", substitutes);
             putMapSettingValues(settings, "buildValidSubstitutes", substitutes);
         }
+    }
+
+    public static void applyBuildPolicies() {
+        Object settings = settings();
+        if (settings == null) {
+            return;
+        }
+        applySafetyModeSettings(settings);
+        applyProtectionSettings(settings);
     }
 
     public static void configureTemporaryScaffoldItems(Set<Item> neededItems) {
@@ -599,6 +645,126 @@ public final class BaritoneBridge {
             return result;
         } catch (ReflectiveOperationException | RuntimeException ignored) {
             return Set.of();
+        }
+    }
+
+    public static List<String> materialPlanSummaries(int limit) {
+        Object builder = builderProcess();
+        if (builder == null) {
+            return List.of();
+        }
+        int max = Math.max(0, limit);
+        if (max == 0) {
+            return List.of();
+        }
+        try {
+            Object schematic = privateField(builder, "schematic");
+            Object incorrect = privateField(builder, "incorrectPositions");
+            Object originObject = privateField(builder, "origin");
+            Object approxObject = privateField(builder, "approxPlaceable");
+            if (schematic == null || !(incorrect instanceof Iterable<?>) || !(originObject instanceof Vec3i origin)) {
+                return List.of();
+            }
+            List<?> approx = approxObject instanceof List<?> list ? list : Collections.emptyList();
+            Method desiredState = schematic.getClass().getMethod(
+                    "desiredState",
+                    int.class,
+                    int.class,
+                    int.class,
+                    BlockState.class,
+                    List.class
+            );
+            desiredState.setAccessible(true);
+            Map<String, Integer> counts = new LinkedHashMap<>();
+            int scanned = 0;
+            for (Object posObject : (Iterable<?>) incorrect) {
+                if (!(posObject instanceof BlockPos pos)) {
+                    continue;
+                }
+                BlockState current = MinecraftHolder.currentBlockState(pos);
+                Object desiredObject = desiredState.invoke(
+                        schematic,
+                        pos.getX() - origin.getX(),
+                        pos.getY() - origin.getY(),
+                        pos.getZ() - origin.getZ(),
+                        current,
+                        approx
+                );
+                if (desiredObject instanceof BlockState desired && !desired.isAir()) {
+                    Item item = desired.getBlock().asItem();
+                    if (item != Items.AIR) {
+                        counts.merge(itemId(item), 1, Integer::sum);
+                    }
+                }
+                scanned++;
+                if (scanned >= 8192) {
+                    break;
+                }
+            }
+            return counts.entrySet().stream()
+                    .sorted(Map.Entry.<String, Integer>comparingByValue().reversed().thenComparing(Map.Entry.comparingByKey()))
+                    .limit(max)
+                    .map(entry -> entry.getKey() + " x" + entry.getValue())
+                    .toList();
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return List.of();
+        }
+    }
+
+    public static List<String> unfinishedBlockSummaries(int limit) {
+        Object builder = builderProcess();
+        if (builder == null) {
+            return List.of();
+        }
+        int max = Math.max(0, limit);
+        if (max == 0) {
+            return List.of();
+        }
+        try {
+            Object schematic = privateField(builder, "schematic");
+            Object incorrect = privateField(builder, "incorrectPositions");
+            Object originObject = privateField(builder, "origin");
+            Object approxObject = privateField(builder, "approxPlaceable");
+            if (schematic == null || !(incorrect instanceof Iterable<?>) || !(originObject instanceof Vec3i origin)) {
+                return List.of();
+            }
+            List<?> approx = approxObject instanceof List<?> list ? list : Collections.emptyList();
+            Method desiredState = schematic.getClass().getMethod(
+                    "desiredState",
+                    int.class,
+                    int.class,
+                    int.class,
+                    BlockState.class,
+                    List.class
+            );
+            desiredState.setAccessible(true);
+            List<String> result = new ArrayList<>();
+            for (Object posObject : (Iterable<?>) incorrect) {
+                if (!(posObject instanceof BlockPos pos)) {
+                    continue;
+                }
+                BlockState current = MinecraftHolder.currentBlockState(pos);
+                Object desiredObject = desiredState.invoke(
+                        schematic,
+                        pos.getX() - origin.getX(),
+                        pos.getY() - origin.getY(),
+                        pos.getZ() - origin.getZ(),
+                        current,
+                        approx
+                );
+                if (!(desiredObject instanceof BlockState desired)) {
+                    continue;
+                }
+                result.add(pos.getX() + "," + pos.getY() + "," + pos.getZ()
+                        + " current=" + blockPath(current.getBlock())
+                        + " desired=" + blockPath(desired.getBlock()));
+                if (result.size() >= max) {
+                    break;
+                }
+            }
+            return result;
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
+            return List.of();
         }
     }
 
@@ -712,6 +878,39 @@ public final class BaritoneBridge {
             }
         }
         return result;
+    }
+
+    private static void applySafetyModeSettings(Object settings) {
+        switch (AutoBuilderConfig.safetyMode()) {
+            case NORMAL -> {
+                setIntegerSetting(settings, "builderTickScanRadius", 5);
+                setBooleanSetting(settings, "buildInLayers", true);
+                setBooleanSetting(settings, "skipFailedLayers", false);
+            }
+            case STABLE -> {
+                setIntegerSetting(settings, "builderTickScanRadius", 4);
+                setBooleanSetting(settings, "buildInLayers", true);
+                setBooleanSetting(settings, "skipFailedLayers", false);
+                setBooleanSetting(settings, "avoidUpdatingFallingBlocks", true);
+            }
+            case COMPLETE -> {
+                setIntegerSetting(settings, "builderTickScanRadius", 3);
+                setBooleanSetting(settings, "buildInLayers", true);
+                setBooleanSetting(settings, "skipFailedLayers", false);
+                setBooleanSetting(settings, "buildIgnoreExisting", false);
+                setBooleanSetting(settings, "buildIgnoreDirection", false);
+                setBooleanSetting(settings, "avoidUpdatingFallingBlocks", true);
+            }
+        }
+    }
+
+    private static void applyProtectionSettings(Object settings) {
+        if (AutoBuilderConfig.protectUtilityBlocks()) {
+            addCollectionSettingValues(settings, "blocksToAvoidBreaking", UTILITY_PROTECTED_BLOCKS);
+        }
+        if (AutoBuilderConfig.protectRedstoneBlocks()) {
+            addCollectionSettingValues(settings, "blocksToAvoidBreaking", REDSTONE_PROTECTED_BLOCKS);
+        }
     }
 
     private static List<Block> orderedSubstitutes(String group, List<Block> blocks, Map<Block, Integer> inventoryCounts, Map<String, Integer> woodFamilyCounts, boolean creative) {
@@ -896,6 +1095,11 @@ public final class BaritoneBridge {
     private static String blockPath(Block block) {
         Identifier key = BuiltInRegistries.BLOCK.getKey(block);
         return key == null ? "" : key.getPath();
+    }
+
+    private static String itemId(Item item) {
+        Identifier key = BuiltInRegistries.ITEM.getKey(item);
+        return key == null ? item.toString() : key.toString();
     }
 
     private static void invokeBuilderNoArgs(String methodName) {

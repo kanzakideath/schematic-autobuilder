@@ -75,6 +75,9 @@ public final class AutoBuilderHudRenderer {
         if (AutoBuilderConfig.hudShowBaritoneStatus()) {
             lines.add(new HudLine("Baritone: " + snapshot.baritoneStatus(), DIM));
         }
+        if (AutoBuilderConfig.hudClickControls()) {
+            lines.add(new HudLine("操作: メニュー/一時停止キーで制御", DIM));
+        }
         return lines;
     }
 
@@ -104,6 +107,9 @@ public final class AutoBuilderHudRenderer {
         }
         if (AutoBuilderConfig.hudShowDebug()) {
             lines.add(new HudLine("DEBUG: updated " + snapshot.updatedAtMs(), 0xFF8CFFEF));
+        }
+        if (AutoBuilderConfig.hudClickControls()) {
+            lines.add(new HudLine("CONTROL: menu / pause / stop keys", DIM));
         }
         return lines;
     }

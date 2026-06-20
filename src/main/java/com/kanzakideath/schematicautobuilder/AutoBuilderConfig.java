@@ -22,6 +22,12 @@ public final class AutoBuilderConfig {
         RIGHT_TOP
     }
 
+    public enum SafetyMode {
+        NORMAL,
+        STABLE,
+        COMPLETE
+    }
+
     private static final List<BlockPos> MATERIAL_CHESTS = new ArrayList<>();
     private static boolean autoFetchMaterials = true;
     private static boolean autoCraftMaterials = true;
@@ -40,6 +46,15 @@ public final class AutoBuilderConfig {
     private static boolean hudShowTarget = true;
     private static boolean hudShowEta = true;
     private static boolean hudShowDebug;
+    private static SafetyMode safetyMode = SafetyMode.STABLE;
+    private static boolean diagnosisLogEnabled = true;
+    private static boolean checkpointEnabled = true;
+    private static boolean dryRunMode;
+    private static boolean protectUtilityBlocks = true;
+    private static boolean protectRedstoneBlocks = true;
+    private static boolean hudClickControls = true;
+    private static boolean showUnfinishedList = true;
+    private static boolean materialPlannerEnabled = true;
     private static int keyMigrationVersion;
 
     private AutoBuilderConfig() {}
@@ -71,6 +86,15 @@ public final class AutoBuilderConfig {
         hudShowTarget = Boolean.parseBoolean(properties.getProperty("hudShowTarget", "true"));
         hudShowEta = Boolean.parseBoolean(properties.getProperty("hudShowEta", "true"));
         hudShowDebug = Boolean.parseBoolean(properties.getProperty("hudShowDebug", "false"));
+        safetyMode = parseSafetyMode(properties.getProperty("safetyMode", SafetyMode.STABLE.name()));
+        diagnosisLogEnabled = Boolean.parseBoolean(properties.getProperty("diagnosisLogEnabled", "true"));
+        checkpointEnabled = Boolean.parseBoolean(properties.getProperty("checkpointEnabled", "true"));
+        dryRunMode = Boolean.parseBoolean(properties.getProperty("dryRunMode", "false"));
+        protectUtilityBlocks = Boolean.parseBoolean(properties.getProperty("protectUtilityBlocks", "true"));
+        protectRedstoneBlocks = Boolean.parseBoolean(properties.getProperty("protectRedstoneBlocks", "true"));
+        hudClickControls = Boolean.parseBoolean(properties.getProperty("hudClickControls", "true"));
+        showUnfinishedList = Boolean.parseBoolean(properties.getProperty("showUnfinishedList", "true"));
+        materialPlannerEnabled = Boolean.parseBoolean(properties.getProperty("materialPlannerEnabled", "true"));
         keyMigrationVersion = parseInt(properties.getProperty("keyMigrationVersion", "0"));
         for (String encoded : properties.getProperty("materialChests", "").split(";")) {
             BlockPos pos = decodePos(encoded);
@@ -99,6 +123,15 @@ public final class AutoBuilderConfig {
         properties.setProperty("hudShowTarget", Boolean.toString(hudShowTarget));
         properties.setProperty("hudShowEta", Boolean.toString(hudShowEta));
         properties.setProperty("hudShowDebug", Boolean.toString(hudShowDebug));
+        properties.setProperty("safetyMode", safetyMode.name());
+        properties.setProperty("diagnosisLogEnabled", Boolean.toString(diagnosisLogEnabled));
+        properties.setProperty("checkpointEnabled", Boolean.toString(checkpointEnabled));
+        properties.setProperty("dryRunMode", Boolean.toString(dryRunMode));
+        properties.setProperty("protectUtilityBlocks", Boolean.toString(protectUtilityBlocks));
+        properties.setProperty("protectRedstoneBlocks", Boolean.toString(protectRedstoneBlocks));
+        properties.setProperty("hudClickControls", Boolean.toString(hudClickControls));
+        properties.setProperty("showUnfinishedList", Boolean.toString(showUnfinishedList));
+        properties.setProperty("materialPlannerEnabled", Boolean.toString(materialPlannerEnabled));
         properties.setProperty("keyMigrationVersion", Integer.toString(keyMigrationVersion));
         List<String> encoded = new ArrayList<>();
         for (BlockPos pos : MATERIAL_CHESTS) {
@@ -269,6 +302,88 @@ public final class AutoBuilderConfig {
         save();
     }
 
+    public static synchronized SafetyMode safetyMode() {
+        return safetyMode;
+    }
+
+    public static synchronized void cycleSafetyMode() {
+        SafetyMode[] values = SafetyMode.values();
+        safetyMode = values[(safetyMode.ordinal() + 1) % values.length];
+        save();
+    }
+
+    public static synchronized boolean diagnosisLogEnabled() {
+        return diagnosisLogEnabled;
+    }
+
+    public static synchronized void toggleDiagnosisLogEnabled() {
+        diagnosisLogEnabled = !diagnosisLogEnabled;
+        save();
+    }
+
+    public static synchronized boolean checkpointEnabled() {
+        return checkpointEnabled;
+    }
+
+    public static synchronized void toggleCheckpointEnabled() {
+        checkpointEnabled = !checkpointEnabled;
+        save();
+    }
+
+    public static synchronized boolean dryRunMode() {
+        return dryRunMode;
+    }
+
+    public static synchronized void toggleDryRunMode() {
+        dryRunMode = !dryRunMode;
+        save();
+    }
+
+    public static synchronized boolean protectUtilityBlocks() {
+        return protectUtilityBlocks;
+    }
+
+    public static synchronized void toggleProtectUtilityBlocks() {
+        protectUtilityBlocks = !protectUtilityBlocks;
+        save();
+    }
+
+    public static synchronized boolean protectRedstoneBlocks() {
+        return protectRedstoneBlocks;
+    }
+
+    public static synchronized void toggleProtectRedstoneBlocks() {
+        protectRedstoneBlocks = !protectRedstoneBlocks;
+        save();
+    }
+
+    public static synchronized boolean hudClickControls() {
+        return hudClickControls;
+    }
+
+    public static synchronized void toggleHudClickControls() {
+        hudClickControls = !hudClickControls;
+        save();
+    }
+
+    public static synchronized boolean showUnfinishedList() {
+        return showUnfinishedList;
+    }
+
+    public static synchronized void toggleShowUnfinishedList() {
+        showUnfinishedList = !showUnfinishedList;
+        save();
+    }
+
+    public static synchronized boolean materialPlannerEnabled() {
+        return materialPlannerEnabled;
+    }
+
+    public static synchronized void toggleMaterialPlannerEnabled() {
+        materialPlannerEnabled = !materialPlannerEnabled;
+        save();
+    }
+
     public static synchronized void addMaterialChest(BlockPos pos) {
         if (!MATERIAL_CHESTS.contains(pos)) {
             MATERIAL_CHESTS.add(pos.immutable());
@@ -344,6 +459,14 @@ public final class AutoBuilderConfig {
             return HudPosition.valueOf(value);
         } catch (IllegalArgumentException | NullPointerException ignored) {
             return HudPosition.LEFT_BOTTOM;
+        }
+    }
+
+    private static SafetyMode parseSafetyMode(String value) {
+        try {
+            return SafetyMode.valueOf(value);
+        } catch (IllegalArgumentException | NullPointerException ignored) {
+            return SafetyMode.STABLE;
         }
     }
 

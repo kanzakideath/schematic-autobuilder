@@ -232,7 +232,49 @@ public final class AutoBuilderScreen extends Screen {
             AutoBuilderConfig.toggleHudShowDebug();
             refresh();
         }));
-        by += row + gap + 20;
+        by += row + gap + 10;
+
+        addRenderableWidget(button(x + 24, by, third, safetyModeLabel(), () -> {
+            AutoBuilderConfig.cycleSafetyMode();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + third, by, third, "ドライラン: " + onOff(AutoBuilderConfig.dryRunMode()), () -> {
+            AutoBuilderConfig.toggleDryRunMode();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 40 + third * 2, by, third, "HUDクリック表示: " + onOff(AutoBuilderConfig.hudClickControls()), () -> {
+            AutoBuilderConfig.toggleHudClickControls();
+            refresh();
+        }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, third, "診断ログ: " + onOff(AutoBuilderConfig.diagnosisLogEnabled()), () -> {
+            AutoBuilderConfig.toggleDiagnosisLogEnabled();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + third, by, third, "チェックポイント: " + onOff(AutoBuilderConfig.checkpointEnabled()), () -> {
+            AutoBuilderConfig.toggleCheckpointEnabled();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 40 + third * 2, by, third, "素材プラン: " + onOff(AutoBuilderConfig.materialPlannerEnabled()), () -> {
+            AutoBuilderConfig.toggleMaterialPlannerEnabled();
+            refresh();
+        }));
+        by += row + gap;
+
+        addRenderableWidget(button(x + 24, by, third, "チェスト等を保護: " + onOff(AutoBuilderConfig.protectUtilityBlocks()), () -> {
+            AutoBuilderConfig.toggleProtectUtilityBlocks();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + third, by, third, "回路を保護: " + onOff(AutoBuilderConfig.protectRedstoneBlocks()), () -> {
+            AutoBuilderConfig.toggleProtectRedstoneBlocks();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 40 + third * 2, by, third, "未完了一覧: " + onOff(AutoBuilderConfig.showUnfinishedList()), () -> {
+            AutoBuilderConfig.toggleShowUnfinishedList();
+            refresh();
+        }));
+        by += row + gap + 10;
 
         addRenderableWidget(button(x + 24, by, full, "\u623b\u308b", this::backToMain));
     }
@@ -276,7 +318,30 @@ public final class AutoBuilderScreen extends Screen {
             AutoBuildController.fetchMaterialsOnly();
             refresh();
         }));
-        addRenderableWidget(button(x + 32 + half, by, half, "\u623b\u308b", this::backToMain));
+        addRenderableWidget(button(x + 32 + half, by, half, "ドライラン確認", () -> {
+            AutoBuildController.runDryRunCheck();
+            refresh();
+        }));
+        by += 30;
+        addRenderableWidget(button(x + 24, by, half, "診断ログを保存", () -> {
+            AutoBuildController.exportDiagnosisNow();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + half, by, half, "チェックポイント保存", () -> {
+            AutoBuildController.saveCheckpointNow();
+            refresh();
+        }));
+        by += 30;
+        addRenderableWidget(button(x + 24, by, half, "チェックポイントから再開", () -> {
+            AutoBuildController.resumeCheckpoint();
+            refresh();
+        }));
+        addRenderableWidget(button(x + 32 + half, by, half, "チェックポイント削除", () -> {
+            AutoBuildController.clearCheckpointNow();
+            refresh();
+        }));
+        by += 30;
+        addRenderableWidget(button(x + 24, by, full, "\u623b\u308b", this::backToMain));
     }
 
     @Override
@@ -393,6 +458,14 @@ public final class AutoBuilderScreen extends Screen {
         return "HUD\u4f4d\u7f6e: " + AutoBuilderConfig.hudPosition().name();
     }
 
+    private static String safetyModeLabel() {
+        return "安全モード: " + switch (AutoBuilderConfig.safetyMode()) {
+            case NORMAL -> "通常";
+            case STABLE -> "安定";
+            case COMPLETE -> "完遂優先";
+        };
+    }
+
     private static String buildOrderText() {
         return AutoBuilderConfig.topDownBuild() ? "\u4e0a\u304b\u3089" : "\u4e0b\u304b\u3089";
     }
@@ -505,9 +578,13 @@ public final class AutoBuilderScreen extends Screen {
         graphics.text(this.font, "\u8868\u793a\u9805\u76ee: \u7d20\u6750\u4e0d\u8db3=" + onOff(AutoBuilderConfig.hudShowMissingMaterials())
                 + " Baritone=" + onOff(AutoBuilderConfig.hudShowBaritoneStatus())
                 + " Target=" + onOff(AutoBuilderConfig.hudShowTarget()), x + 10, y + 90, DIM);
+        graphics.text(this.font, safetyModeLabel() + " / 診断ログ=" + onOff(AutoBuilderConfig.diagnosisLogEnabled())
+                + " / 保護=" + onOff(AutoBuilderConfig.protectUtilityBlocks() || AutoBuilderConfig.protectRedstoneBlocks()), x + 10, y + 106, CYAN);
+        graphics.text(this.font, "チェックポイント: " + AutoBuildController.checkpointSummary()
+                + " / 最終診断: " + AutoBuilderDiagnostics.lastExportPath(), x + 10, y + 122, DIM);
         AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
         graphics.text(this.font, "\u30d7\u30ec\u30d3\u30e5\u30fc: " + snapshot.state() + " / \u9032\u6357 " + String.format(java.util.Locale.ROOT, "%.1f%%", snapshot.progress())
-                + " / \u6b8b\u308a " + snapshot.remainingBlocks(), x + 10, y + 106, statusColor(snapshot.state()));
+                + " / \u6b8b\u308a " + snapshot.remainingBlocks(), x + 10, y + 138, statusColor(snapshot.state()));
     }
 
     private void drawChestsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
@@ -527,18 +604,33 @@ public final class AutoBuilderScreen extends Screen {
     }
 
     private void drawMaterialsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
-        section(graphics, x, y, width, 270, "MATERIAL ANALYSIS  \u5fc5\u8981/\u4e0d\u8db3\u7d20\u6750", "\u76f4\u8fd1\u306eBaritone\u5efa\u7bc9\u304c\u8981\u6c42\u3057\u305f\u7d20\u6750\u5019\u88dc\u3067\u3059");
+        section(graphics, x, y, width, 270, "MATERIAL / DIAGNOSIS  \u7d20\u6750\u30fb\u8a3a\u65ad", "\u5fc5\u8981\u7d20\u6750\u3001\u672a\u5b8c\u4e86\u30d6\u30ed\u30c3\u30af\u3001\u8a3a\u65ad\u30ed\u30b0\u3092\u78ba\u8a8d\u3057\u307e\u3059");
         AutoBuilderStatusSnapshot snapshot = AutoBuildController.statusSnapshot();
         graphics.text(this.font, "\u4e0d\u8db3\u5019\u88dc: " + snapshot.missingMaterialTypes() + "\u7a2e / \u7d20\u6750\u30c1\u30a7\u30b9\u30c8: " + snapshot.materialChestCount(), x + 10, y + 42, snapshot.missingMaterialTypes() > 0 ? ORANGE : GREEN);
         int ly = y + 64;
         int index = 1;
-        for (String item : AutoBuildController.neededMaterialSummaries(10)) {
+        for (String item : AutoBuildController.materialPlanSummaries(8)) {
             graphics.text(this.font, String.format(java.util.Locale.ROOT, "%02d  %s", index, item), x + 10, ly, TEXT);
             ly += 16;
             index++;
         }
         if (index == 1) {
             graphics.text(this.font, "\u307e\u3060\u5fc5\u8981\u7d20\u6750\u60c5\u5831\u304c\u3042\u308a\u307e\u305b\u3093\u3002\u5efa\u7bc9\u958b\u59cb\u5f8c\u306b\u66f4\u65b0\u3055\u308c\u307e\u3059\u3002", x + 10, ly, DIM);
+            ly += 16;
+        }
+        ly += 8;
+        graphics.text(this.font, "未完了ブロック:", x + 10, ly, CYAN);
+        ly += 16;
+        int unfinished = 1;
+        if (AutoBuilderConfig.showUnfinishedList()) {
+            for (String line : AutoBuildController.unfinishedBlockSummaries(6)) {
+                graphics.text(this.font, String.format(java.util.Locale.ROOT, "%02d  %s", unfinished, line), x + 10, ly, DIM);
+                ly += 14;
+                unfinished++;
+            }
+        }
+        if (unfinished == 1) {
+            graphics.text(this.font, "未完了一覧はまだありません。", x + 10, ly, DIM);
         }
     }
 
@@ -571,7 +663,7 @@ public final class AutoBuilderScreen extends Screen {
     }
 
     private static int panelHeight() {
-        return 460;
+        return 520;
     }
 
     private static void border(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int color) {
