@@ -29,6 +29,7 @@ public final class AutoBuildController {
     private static final int CREATIVE_SMALL_REMAINING_STALL_TICKS = 60;
     private static final int CREATIVE_COMMAND_FILL_REMAINING_THRESHOLD = 512;
     private static final int CREATIVE_COMMAND_FILL_BATCH = 64;
+    private static final int MAX_REPEATED_CREATIVE_COMMAND_FILL = 2;
     private static final int MAX_COMPLETION_RECHECKS = 2;
     private static final int COMPLETION_RECHECK_GUARD_TICKS = 12;
 
@@ -63,8 +64,10 @@ public final class AutoBuildController {
     private static int diagnosticNoticeTicks;
     private static int progressStallTicks;
     private static int completionRecheckCount;
+    private static int repeatedCreativeCommandFillAttempts;
     private static int lastRemainingBlocks = -1;
     private static String lastProgressTarget = "";
+    private static String lastCreativeCommandFillSignature = "";
     private static boolean materialShortageNotified;
     private static boolean baritoneReportedFinished;
     private static String status = "Idle";
@@ -129,6 +132,7 @@ public final class AutoBuildController {
         materialShortageNotified = false;
         baritoneReportedFinished = false;
         resetProgressWatch();
+        resetCreativeCommandFillWatch();
         status = completeStatus;
         cachedSnapshotAtMs = 0L;
         message(completeStatus, ChatFormatting.GREEN);
@@ -182,6 +186,7 @@ public final class AutoBuildController {
         materialShortageNotified = false;
         baritoneReportedFinished = false;
         resetProgressWatch();
+        resetCreativeCommandFillWatch();
         status = "整地モードに切り替え";
         cachedSnapshotAtMs = 0L;
     }
@@ -219,6 +224,7 @@ public final class AutoBuildController {
         builderPausedTicks = 0;
         inactiveTicks = 0;
         resetProgressWatch();
+        resetCreativeCommandFillWatch();
         refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
         creativeSupplyTicks = 0;
         diagnosticAttempts = 0;
@@ -273,6 +279,7 @@ public final class AutoBuildController {
         builderPausedTicks = 0;
         inactiveTicks = 0;
         resetProgressWatch();
+        resetCreativeCommandFillWatch();
         refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
         creativeSupplyTicks = 0;
         diagnosticAttempts = 0;
@@ -326,6 +333,7 @@ public final class AutoBuildController {
         builderPausedTicks = 0;
         inactiveTicks = 0;
         resetProgressWatch();
+        resetCreativeCommandFillWatch();
         refetchGuardTicks = isCreativeMode() ? CREATIVE_REFETCH_GUARD_TICKS : INITIAL_REFETCH_GUARD_TICKS;
         creativeSupplyTicks = 0;
         diagnosticAttempts = 0;
@@ -369,6 +377,7 @@ public final class AutoBuildController {
         activeSchematicFileName = "";
         activeSchematicOrigin = null;
         baritoneReportedFinished = false;
+        resetCreativeCommandFillWatch();
         AutoBuilderDiagnostics.export("cancel");
         AutoBuilderCheckpoint.clear();
         status = "Cancelled";
@@ -685,6 +694,18 @@ public final class AutoBuildController {
         if (!isCreativeMode() || remainingBlocks <= 0 || remainingBlocks > CREATIVE_COMMAND_FILL_REMAINING_THRESHOLD) {
             return false;
         }
+        String signature = remainingBlocks + "|" + BaritoneBridge.buildStats().target();
+        if (signature.equals(lastCreativeCommandFillSignature)) {
+            repeatedCreativeCommandFillAttempts++;
+        } else {
+            lastCreativeCommandFillSignature = signature;
+            repeatedCreativeCommandFillAttempts = 1;
+        }
+        if (repeatedCreativeCommandFillAttempts > MAX_REPEATED_CREATIVE_COMMAND_FILL) {
+            status = "Creative補完をスキップ: 同じ対象で改善しないため別手順へ進みます";
+            message(status, ChatFormatting.YELLOW);
+            return false;
+        }
         int sent = BaritoneBridge.creativeCommandSetRemaining(CREATIVE_COMMAND_FILL_BATCH);
         if (sent <= 0) {
             return false;
@@ -697,6 +718,11 @@ public final class AutoBuildController {
         status = "Creative補完: 未完了ブロックを直接反映しました (" + sent + ")";
         message(status + " / " + reason, ChatFormatting.GREEN);
         return true;
+    }
+
+    private static void resetCreativeCommandFillWatch() {
+        repeatedCreativeCommandFillAttempts = 0;
+        lastCreativeCommandFillSignature = "";
     }
 
     private static void startMaterialFetchForBuild(String reason) {

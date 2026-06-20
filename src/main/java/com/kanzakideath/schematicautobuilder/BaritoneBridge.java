@@ -27,6 +27,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.StringJoiner;
@@ -288,7 +289,7 @@ public final class BaritoneBridge {
                 if (isTransientStateProperty(value.property().getName())) {
                     continue;
                 }
-                joiner.add(value.property().getName() + "=" + value.value());
+                joiner.add(value.property().getName() + "=" + statePropertyValue(value));
             }
             String properties = joiner.toString();
             if (!properties.isEmpty()) {
@@ -296,6 +297,22 @@ public final class BaritoneBridge {
             }
         }
         return command.toString();
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static String statePropertyValue(Property.Value<?> value) {
+        if (value == null || value.property() == null || value.value() == null) {
+            return "";
+        }
+        Property property = value.property();
+        Object raw = value.value();
+        if (raw instanceof Comparable comparable) {
+            try {
+                return property.getName(comparable);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        return raw.toString().toLowerCase(Locale.ROOT);
     }
 
     private static boolean equivalentForCreativeCommand(BlockState current, BlockState desired) {
