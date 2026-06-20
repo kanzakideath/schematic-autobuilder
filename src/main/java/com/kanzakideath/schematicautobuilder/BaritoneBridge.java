@@ -595,9 +595,11 @@ public final class BaritoneBridge {
         setBooleanSetting(settings, "buildOnlySelection", false);
         setBooleanSetting(settings, "buildInLayers", true);
         setBooleanSetting(settings, "layerOrder", AutoBuilderConfig.topDownBuild());
+        setBooleanSetting(settings, "syncLitematicaRenderLayer", AutoBuilderConfig.litematicaLayerSync());
         setBooleanSetting(settings, "skipFailedLayers", false);
         setBooleanSetting(settings, "okIfWater", false);
         setBooleanSetting(settings, "mapArtMode", false);
+        setIntegerSetting(settings, "layerHeight", 1);
         setIntegerSetting(settings, "startAtLayer", 0);
         clearCollectionSetting(settings, "buildIgnoreBlocks");
         clearCollectionSetting(settings, "buildSkipBlocks");

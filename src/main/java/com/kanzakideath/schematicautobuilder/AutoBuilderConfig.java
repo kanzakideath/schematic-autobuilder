@@ -32,7 +32,8 @@ public final class AutoBuilderConfig {
     private static boolean autoFetchMaterials = true;
     private static boolean autoCraftMaterials = true;
     private static boolean startBuildAfterFetch = true;
-    private static boolean topDownBuild = true;
+    private static boolean topDownBuild;
+    private static boolean litematicaLayerSync = true;
     private static boolean autoSubstituteMaterials = true;
     private static boolean hudEnabled = true;
     private static HudPosition hudPosition = HudPosition.LEFT_BOTTOM;
@@ -72,7 +73,8 @@ public final class AutoBuilderConfig {
         autoFetchMaterials = Boolean.parseBoolean(properties.getProperty("autoFetchMaterials", "true"));
         autoCraftMaterials = Boolean.parseBoolean(properties.getProperty("autoCraftMaterials", "true"));
         startBuildAfterFetch = Boolean.parseBoolean(properties.getProperty("startBuildAfterFetch", "true"));
-        topDownBuild = Boolean.parseBoolean(properties.getProperty("topDownBuild", "true"));
+        topDownBuild = Boolean.parseBoolean(properties.getProperty("topDownBuild", "false"));
+        litematicaLayerSync = Boolean.parseBoolean(properties.getProperty("litematicaLayerSync", "true"));
         autoSubstituteMaterials = Boolean.parseBoolean(properties.getProperty("autoSubstituteMaterials", "true"));
         hudEnabled = Boolean.parseBoolean(properties.getProperty("hudEnabled", "true"));
         hudPosition = parseHudPosition(properties.getProperty("hudPosition", HudPosition.LEFT_BOTTOM.name()));
@@ -110,6 +112,7 @@ public final class AutoBuilderConfig {
         properties.setProperty("autoCraftMaterials", Boolean.toString(autoCraftMaterials));
         properties.setProperty("startBuildAfterFetch", Boolean.toString(startBuildAfterFetch));
         properties.setProperty("topDownBuild", Boolean.toString(topDownBuild));
+        properties.setProperty("litematicaLayerSync", Boolean.toString(litematicaLayerSync));
         properties.setProperty("autoSubstituteMaterials", Boolean.toString(autoSubstituteMaterials));
         properties.setProperty("hudEnabled", Boolean.toString(hudEnabled));
         properties.setProperty("hudPosition", hudPosition.name());
@@ -181,6 +184,15 @@ public final class AutoBuilderConfig {
 
     public static synchronized void toggleTopDownBuild() {
         topDownBuild = !topDownBuild;
+        save();
+    }
+
+    public static synchronized boolean litematicaLayerSync() {
+        return litematicaLayerSync;
+    }
+
+    public static synchronized void toggleLitematicaLayerSync() {
+        litematicaLayerSync = !litematicaLayerSync;
         save();
     }
 

@@ -145,8 +145,8 @@ public final class AutoBuilderScreen extends Screen {
             AutoBuilderConfig.toggleTopDownBuild();
             refresh();
         }));
-        addRenderableWidget(button(x + half + 8, y, half, "素材チェスト全削除", () -> {
-            AutoBuilderConfig.clearMaterialChests();
+        addRenderableWidget(button(x + half + 8, y, half, litematicaLayerSyncLabel(), () -> {
+            AutoBuilderConfig.toggleLitematicaLayerSync();
             refresh();
         }));
     }
@@ -366,8 +366,8 @@ public final class AutoBuilderScreen extends Screen {
         drawSection(graphics, x, y + 8, width, 82, BLUE, "1. 作業モード", "自動建築はベータ版です。止まった場合は自動診断で補充、作成、再初期化、難所スキップを試します。");
         drawSection(graphics, x, y + 100, width, 112, GREEN, "2. 素材補充", "素材チェストを登録すると、不足時に少量ずつ取りに戻ります。登録中はチェストを右クリックしてください。");
         drawSection(graphics, x, y + 222, width, 74, PURPLE, "3. 管理", "更新確認、素材代用、建築順序、素材一覧をここから確認できます。");
-        graphics.text(this.font, "建築順序: " + buildOrderText(), x + 12, y + 316, AutoBuilderConfig.topDownBuild() ? BLUE : YELLOW);
-        graphics.text(this.font, "Baritone: " + statusJa(BaritoneBridge.hudStatus()), x + 180, y + 316, BaritoneBridge.isAvailable() ? GREEN : RED);
+        graphics.text(this.font, "建築順序: " + buildOrderText() + " / Litematica同期: " + onOff(AutoBuilderConfig.litematicaLayerSync()), x + 12, y + 316, AutoBuilderConfig.litematicaLayerSync() ? GREEN : YELLOW);
+        graphics.text(this.font, "Baritone: " + statusJa(BaritoneBridge.hudStatus()), x + 12, y + 330, BaritoneBridge.isAvailable() ? GREEN : RED);
     }
 
     private void drawSettingsPage(GuiGraphicsExtractor graphics, int x, int y, int width) {
@@ -515,6 +515,10 @@ public final class AutoBuilderScreen extends Screen {
         return "建築順序: " + buildOrderText();
     }
 
+    private static String litematicaLayerSyncLabel() {
+        return "設計図レイヤー同期: " + onOff(AutoBuilderConfig.litematicaLayerSync());
+    }
+
     private static String substituteLabel() {
         return "素材代用: " + onOff(AutoBuilderConfig.autoSubstituteMaterials());
     }
@@ -540,7 +544,7 @@ public final class AutoBuilderScreen extends Screen {
     }
 
     private static String buildOrderText() {
-        return AutoBuilderConfig.topDownBuild() ? "上から" : "下から";
+        return AutoBuilderConfig.topDownBuild() ? "上から1段ずつ" : "下から1段ずつ";
     }
 
     private static String materialChestRegisterLabel() {

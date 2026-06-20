@@ -78,6 +78,7 @@ public final class AutoBuilderDiagnostics {
         builder.append("autoCraft=").append(AutoBuilderConfig.autoCraftMaterials()).append('\n');
         builder.append("autoSubstitute=").append(AutoBuilderConfig.autoSubstituteMaterials()).append('\n');
         builder.append("topDown=").append(AutoBuilderConfig.topDownBuild()).append('\n');
+        builder.append("litematicaLayerSync=").append(AutoBuilderConfig.litematicaLayerSync()).append('\n');
         builder.append("materialChestCount=").append(AutoBuilderConfig.materialChestCount()).append('\n');
         builder.append("materialChests=").append(chestList()).append('\n');
         builder.append("neededItems=").append(itemList(neededItems)).append('\n');
